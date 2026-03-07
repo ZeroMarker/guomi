@@ -1,110 +1,59 @@
 # Guomi
 
-国密算法 Elixir 实现。本库使用 Erlang crypto 模块实现中国国家密码管理局发布的密码算法标准。
+国密算法 Elixir 实现。本库优先使用 Erlang/OTP `:crypto` 能力，并在运行时探测算法可用性。
 
-## 支持的算法
+## 支持状态
 
-- **SM2** - 椭圆曲线公钥密码算法（GM/T 0003-2012）
-  - 密钥对生成
-  - 数字签名和验签
-  - 公钥加密和解密
-
-- **SM3** - 密码杂凑算法（GM/T 0004-2012）
-  - 256 位哈希值输出
-
-- **SM4** - 分组密码算法（GM/T 0002-2012）
-  - 128 位分组长度
-  - 128 位密钥长度
-  - ECB 和 CBC 模式
+- `SM3`：已实现（哈希、十六进制输出）
+- `SM4`：已实现（ECB/CBC，支持 `:pkcs7` 与 `:none` 填充）
+- `SM2`：已实现密钥对、签名、验签（依赖运行时是否支持 `:sm2` 曲线）
+- `SM2` 加解密：当前返回 `{:error, :unsupported}`（OTP/OpenSSL 在不同环境支持差异较大）
 
 ## 依赖
 
-本库依赖 Erlang/OTP 24+ 和 OpenSSL 3.0+（提供国密算法支持）。
+- Elixir 1.14+
+- Erlang/OTP 24+
+- OpenSSL 3.0+（用于更完整国密算法支持）
 
 ## 安装
 
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.1.0"}
+    {:guomi, path: "../guomi"}
   ]
 end
 ```
 
-## 使用示例
-
-### SM3 哈希
+## 使用
 
 ```elixir
-# 二进制哈希
-Guomi.SM3.hash("hello")
-# => <<0xbe, 0xcb, 0xbf, 0xaa, ...>>
-
-# 十六进制字符串
-Guomi.SM3.hash_hex("hello")
-# => "becbbfaae6548b8bf0cfcad5a27183cd1be6093b1cceccc303d9c61d0a645268"
+Guomi.SM3.hash_hex("abc")
+#=> "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
 ```
-
-### SM4 加密解密
 
 ```elixir
-# ECB 模式
-key = :crypto.strong_rand_bytes(16)
-plaintext = <<0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15>>
+key = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
+plain = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
 
-# 加密
-{:ok, ciphertext} = Guomi.SM4.encrypt(plaintext, key)
-
-# 解密
-{:ok, decrypted} = Guomi.SM4.decrypt(ciphertext, key)
-
-# CBC 模式
-iv = :crypto.strong_rand_bytes(16)
-{:ok, ciphertext} = Guomi.SM4.encrypt_cbc(plaintext, key, iv)
-{:ok, decrypted} = Guomi.SM4.decrypt_cbc(ciphertext, key, iv)
+{:ok, cipher} = Guomi.SM4.encrypt(plain, key, padding: :none)
+{:ok, back} = Guomi.SM4.decrypt(cipher, key, padding: :none)
 ```
-
-### SM2 签名验签
 
 ```elixir
-# 生成密钥对
-{:ok, private_key, public_key} = Guomi.SM2.generate_keypair()
+case Guomi.SM2.generate_keypair() do
+  {:ok, sk, pk} ->
+    {:ok, sig} = Guomi.SM2.sign("message", sk)
+    {:ok, valid?} = Guomi.SM2.verify("message", sig, pk)
+    valid?
 
-# 签名
-{:ok, signature} = Guomi.SM2.sign("message", private_key)
-
-# 验签
-{:ok, valid?} = Guomi.SM2.verify("message", signature, public_key)
+  {:error, :unsupported} ->
+    :runtime_not_supported
+end
 ```
 
-### SM2 加密解密
-
-```elixir
-# 加密
-{:ok, ciphertext} = Guomi.SM2.encrypt("secret", public_key)
-
-# 解密
-{:ok, plaintext} = Guomi.SM2.decrypt(ciphertext, private_key)
-```
-
-## 运行测试
+## 测试
 
 ```bash
 mix test
 ```
-
-## 生成文档
-
-```bash
-mix docs
-```
-
-## 注意事项
-
-- SM3 和 SM4 使用 Erlang crypto 模块（需要 OpenSSL 3.0+）
-- SM2 为纯 Elixir 实现，性能可能不如 NIF 实现
-- 生产环境建议使用经过充分测试的密码学库
-
-## 许可证
-
-MIT License
