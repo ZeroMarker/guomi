@@ -10,7 +10,7 @@ defmodule Guomi.MixProject do
       deps: deps(),
       description: "Guomi cryptographic algorithms for Elixir (SM2/SM3/SM4)",
       package: package(),
-      source_url: "https://example.com/guomi"
+      source_url: "https://github.com/ZeroMarker/guomi"
     ]
   end
 
@@ -21,13 +21,15 @@ defmodule Guomi.MixProject do
   end
 
   defp deps do
-    []
+  [
+    {:ex_doc, "~> 0.31",     only: :dev, runtime: false}
+  ]
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://example.com/guomi"}
+      links: %{"GitHub" => "https://github.com/ZeroMarker/guomi"}
     ]
   end
 end
