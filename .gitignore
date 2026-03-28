@@ -22,6 +22,39 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 guomi-*.tar
 
+# Elixir language server artifacts
+.elixir_ls/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test artifacts
+test/tmp/
+
+# Coverage and dialyzer
+.plt
+.plts
+dialyzer.plt
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Local config overrides
+config/config.local.exs
+
 .opencode/
 
 opencode.jsonc
+
+skills/
+
+.clawhub

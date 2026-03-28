@@ -49,7 +49,8 @@ defmodule Guomi.SM4 do
     end
   end
 
-  @spec encrypt_cbc(binary(), binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
+  @spec encrypt_cbc(binary(), binary(), binary(), keyword()) ::
+          {:ok, binary()} | {:error, error_reason()}
   def encrypt_cbc(plaintext, key, iv, opts \\ [])
       when is_binary(plaintext) and is_binary(key) and is_binary(iv) do
     try do
@@ -65,7 +66,8 @@ defmodule Guomi.SM4 do
     end
   end
 
-  @spec decrypt_cbc(binary(), binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
+  @spec decrypt_cbc(binary(), binary(), binary(), keyword()) ::
+          {:ok, binary()} | {:error, error_reason()}
   def decrypt_cbc(ciphertext, key, iv, opts \\ [])
       when is_binary(ciphertext) and is_binary(key) and is_binary(iv) do
     try do

@@ -135,23 +135,120 @@ defmodule Guomi.SM2Test do
     end
   end
 
-  describe "encrypt/2" do
-    test "returns unsupported for current implementation" do
+  describe "encrypt/2 and decrypt/2" do
+    test "encrypt/decrypt roundtrip when supported" do
       case Guomi.SM2.generate_keypair() do
-        {:ok, _private_key, public_key} ->
-          assert {:error, :unsupported} = Guomi.SM2.encrypt("test", public_key)
+        {:ok, private_key, public_key} ->
+          plaintext = "secret message"
+          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
+          assert decrypted == plaintext
 
         {:error, :unsupported} ->
           assert true
       end
     end
-  end
 
-  describe "decrypt/2" do
-    test "returns unsupported for current implementation" do
+    test "encrypt/decrypt with empty message" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          plaintext = ""
+          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
+          assert decrypted == plaintext
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "encrypt/decrypt with binary data" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          plaintext = <<0, 1, 2, 3, 255, 128, 64>>
+          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
+          assert decrypted == plaintext
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "encrypt/decrypt with long message" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          plaintext = String.duplicate("abcdefghij", 100)
+          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
+          assert decrypted == plaintext
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "decrypt with wrong private key" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, _priv1, pub1} ->
+          {:ok, priv2, _pub2} = Guomi.SM2.generate_keypair()
+          plaintext = "test"
+          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, pub1)
+          assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ciphertext, priv2)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "decrypt with invalid ciphertext" do
       case Guomi.SM2.generate_keypair() do
         {:ok, private_key, _public_key} ->
-          assert {:error, :unsupported} = Guomi.SM2.decrypt(<<1, 2, 3>>, private_key)
+          # Too short ciphertext
+          assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<1, 2, 3>>, private_key)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "decrypt with tampered ciphertext" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          plaintext = "test message"
+          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          # Tamper with the encrypted data portion
+          <<c1::binary-size(65), c2::binary-size(10), rest::binary>> = ciphertext
+          tampered_c2 = :binary.copy(<<Bitwise.bxor(:binary.first(c2), 0xFF)>>, 10)
+          tampered = c1 <> tampered_c2 <> rest
+          assert {:error, :decryption_failed} = Guomi.SM2.decrypt(tampered, private_key)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "ciphertext is larger than plaintext" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, _private_key, public_key} ->
+          plaintext = "test"
+          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert byte_size(ciphertext) > byte_size(plaintext)
+          # Ciphertext = ephemeral pubkey (65) + encrypted data + MAC (32)
+          assert byte_size(ciphertext) >= 65 + 32
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "handles iodata plaintext" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          plaintext = ["hello", " ", "world"]
+          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
+          assert decrypted == "hello world"
 
         {:error, :unsupported} ->
           assert true
