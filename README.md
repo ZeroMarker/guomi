@@ -28,12 +28,12 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.1.0"}
+    {:guomi, "~> 0.2.0"}
   ]
 end
 ```
 
-### 从 GitHub 安装
+### 从 GitHub 安装 (开发版)
 
 ```elixir
 def deps do
@@ -207,11 +207,24 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-### v0.1.0 (2026-03-28)
-- 初始版本
-- 实现 SM2 密钥对生成、签名、验签、加密、解密
-- 实现 SM3 哈希（二进制/十六进制输出）
-- 实现 SM4 加密（ECB/CBC 模式，PKCS7/none 填充）
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
+
+### Recent Versions
+
+#### [0.3.0] - Unreleased
+- CLI tool with commands for SM2, SM3, and SM4 operations
+- Version and help commands for CLI
+
+#### [0.2.0] - 2026-04-01
+- SM2 encryption and decryption functionality
+
+#### [0.1.0] - 2026-03-28
+- Initial release
+- SM2/SM3/SM4 implementations
+
+[0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ZeroMarker/guomi/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ZeroMarker/guomi/releases/tag/v0.1.0
 
 ## 与其他库对比
 
