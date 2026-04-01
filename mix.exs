@@ -14,7 +14,8 @@ defmodule Guomi.MixProject do
       package: package(),
       source_url: "https://github.com/ZeroMarker/guomi",
       docs: docs(),
-      dialyzer: [plt_add_apps: [:mix]]
+      dialyzer: [plt_add_apps: [:mix]],
+      escript: [main_module: Guomi.CLI]
     ]
   end
 

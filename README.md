@@ -103,14 +103,14 @@ case Guomi.SM2.generate_keypair() do
   {:ok, private_key, public_key} ->
     # 签名
     {:ok, signature} = Guomi.SM2.sign("message", private_key)
-    
+
     # 验签
     {:ok, valid?} = Guomi.SM2.verify("message", signature, public_key)
     valid?
 
     # 加密
     {:ok, ciphertext} = Guomi.SM2.encrypt("secret message", public_key)
-    
+
     # 解密
     {:ok, plaintext} = Guomi.SM2.decrypt(ciphertext, private_key)
 
@@ -122,6 +122,54 @@ end
 Guomi.SM2.supported?()
 #=> true | false
 ```
+
+## CLI 工具
+
+Guomi 提供命令行工具，可直接执行国密算法操作。
+
+### 安装
+
+```bash
+mix escript.build
+./guomi version
+```
+
+### 命令
+
+| 命令 | 说明 |
+|------|------|
+| `guomi sm3` | 计算 SM3 哈希 |
+| `guomi sm4` | SM4 加密/解密 |
+| `guomi sm2` | SM2 密钥生成、签名/验签、加密/解密 |
+| `guomi version` | 显示版本信息 |
+| `guomi help` | 显示帮助信息 |
+
+### 使用示例
+
+```bash
+# SM3 哈希
+echo -n "hello" | guomi sm3 --hex
+#=> 5897d5a782929dcdbf5e8fdb8e23d2781b5a1f5e8236e1c48e11c7b730a1e8f0
+
+# SM4 加密
+echo "secret" | guomi sm4 --key 0123456789abcdef0123456789abcdef --hex
+
+# SM4 解密
+guomi sm4 --decrypt --hex --key 0123456789abcdef0123456789abcdef < ciphertext.hex
+
+# SM2 生成密钥对
+guomi sm2 --generate
+
+# SM2 签名
+echo "message" | guomi sm2 --sign --private-key <hex-key>
+
+# SM2 验签
+guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
+```
+
+### 完整文档
+
+运行 `guomi help` 或 `guomi <command> --help` 查看更多选项。
 
 ## 开发
 
