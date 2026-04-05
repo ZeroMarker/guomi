@@ -28,7 +28,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.2.0"}
+    {:guomi, "~> 0.3.0"}
   ]
 end
 ```
