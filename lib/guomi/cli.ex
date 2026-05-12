@@ -122,7 +122,7 @@ defmodule Guomi.CLI do
     else
       mode = Keyword.get(opts, :mode, "ecb")
       key = parse_hex_or_exit(opts[:key], "key")
-      padding = Keyword.get(opts, :padding, "pkcs7") |> String.to_atom()
+      padding = parse_padding_or_exit(Keyword.get(opts, :padding, "pkcs7"))
 
       input =
         case remaining do
@@ -168,12 +168,12 @@ defmodule Guomi.CLI do
   end
 
   defp decrypt_sm4(input, key, "ecb", _iv, padding, hex_input) do
-    ciphertext = if hex_input, do: Base.decode16!(input, case: :mixed), else: input
+    ciphertext = if hex_input, do: parse_hex_or_exit(input, "ciphertext"), else: input
     Guomi.SM4.decrypt(ciphertext, key, padding: padding)
   end
 
   defp decrypt_sm4(input, key, "cbc", iv, padding, hex_input) do
-    ciphertext = if hex_input, do: Base.decode16!(input, case: :mixed), else: input
+    ciphertext = if hex_input, do: parse_hex_or_exit(input, "ciphertext"), else: input
     iv = parse_hex_or_exit(iv, "iv")
     Guomi.SM4.decrypt_cbc(ciphertext, key, iv, padding: padding)
   end
@@ -307,7 +307,7 @@ defmodule Guomi.CLI do
           IO.read(:stdio, :eof)
       end
 
-    ciphertext = Base.decode16!(ciphertext, case: :mixed)
+    ciphertext = parse_hex_or_exit(ciphertext, "ciphertext")
     private_key = parse_hex_or_exit(opts[:private_key], "private-key")
 
     case Guomi.SM2.decrypt(ciphertext, private_key) do
@@ -336,7 +336,7 @@ defmodule Guomi.CLI do
   defp parse_hex_or_exit(nil, _), do: nil
 
   defp parse_hex_or_exit(hex_string, name) do
-    case Base.decode16(hex_string, case: :mixed) do
+    case hex_string |> String.trim() |> Base.decode16(case: :mixed) do
       {:ok, binary} ->
         binary
 
@@ -344,6 +344,14 @@ defmodule Guomi.CLI do
         IO.puts(:stderr, "Error: Invalid hex encoding for #{name}")
         System.halt(1)
     end
+  end
+
+  defp parse_padding_or_exit("pkcs7"), do: :pkcs7
+  defp parse_padding_or_exit("none"), do: :none
+
+  defp parse_padding_or_exit(padding) do
+    IO.puts(:stderr, "Error: Invalid padding option: #{padding} (use 'pkcs7' or 'none')")
+    System.halt(1)
   end
 
   defp format_sm4_error(:invalid_key_size), do: "Invalid key size (must be 16 bytes)"

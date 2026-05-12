@@ -163,39 +163,30 @@ defmodule Guomi.SM2 do
 
   """
   @spec decrypt(binary(), binary()) :: {:ok, binary()} | {:error, error_reason()}
+  def decrypt(ciphertext, _private_key) when byte_size(ciphertext) < 97 do
+    {:error, :invalid_ciphertext}
+  end
+
   def decrypt(ciphertext, private_key) do
     if not supported?() do
       {:error, :unsupported}
     else
       try do
-        # Parse ciphertext: C1 (65 bytes ephemeral pubkey) || C2 (encrypted data) || C3 (32 bytes MAC)
-        <<ephemeral_pub::binary-size(65), rest::binary>> = ciphertext
+        # Ciphertext: C1 (65-byte ephemeral public key) || C2 || C3 (32-byte MAC).
+        <<ephemeral_pub::binary-size(65), encrypted_data::binary-size(byte_size(ciphertext) - 97),
+          mac::binary-size(32)>> = ciphertext
 
-        if byte_size(rest) < 32 do
-          {:error, :invalid_ciphertext}
+        {:ok, shared_raw} =
+          :crypto.generate_key(:ecdh, {:ecdh, ephemeral_pub, @curve}, private_key)
+
+        shared = extract_shared_secret(shared_raw)
+        {key_enc, key_mac} = derive_keys(shared)
+        expected_mac = :crypto.hash(:sm3, key_mac <> encrypted_data)
+
+        if secure_compare(mac, expected_mac) do
+          {:ok, xor_with_keystream(encrypted_data, key_enc)}
         else
-          encrypted_size = byte_size(rest) - 32
-          <<encrypted_data::binary-size(encrypted_size), mac::binary-size(32)>> = rest
-
-          # Compute shared secret: S = ephemeral_pub * private_key
-          {:ok, shared_raw} =
-            :crypto.generate_key(:ecdh, {:ecdh, ephemeral_pub, @curve}, private_key)
-
-          shared = extract_shared_secret(shared_raw)
-
-          # Derive keys using SM3 KDF
-          {key_enc, key_mac} = derive_keys(shared)
-
-          # Verify MAC
-          expected_mac = :crypto.hash(:sm3, key_mac <> encrypted_data)
-
-          if secure_compare(mac, expected_mac) do
-            # Decrypt data
-            plaintext = xor_with_keystream(encrypted_data, key_enc)
-            {:ok, plaintext}
-          else
-            {:error, :decryption_failed}
-          end
+          {:error, :decryption_failed}
         end
       rescue
         _ -> {:error, :decryption_failed}
@@ -231,21 +222,27 @@ defmodule Guomi.SM2 do
 
   # XOR two binary strings
   defp xor_bytes(a, b) do
-    a_bytes = :binary.bin_to_list(a)
-    b_bytes = :binary.bin_to_list(b)
-    xor_result = Enum.zip_with(a_bytes, b_bytes, fn x, y -> Bitwise.bxor(x, y) end)
-    :binary.list_to_bin(xor_result)
+    do_xor_bytes(a, b, [])
+  end
+
+  defp do_xor_bytes(<<>>, <<>>, acc), do: acc |> Enum.reverse() |> :binary.list_to_bin()
+
+  defp do_xor_bytes(<<x, rest_a::binary>>, <<y, rest_b::binary>>, acc) do
+    do_xor_bytes(rest_a, rest_b, [Bitwise.bxor(x, y) | acc])
   end
 
   # Constant-time comparison to prevent timing attacks
   defp secure_compare(a, b) when byte_size(a) == byte_size(b) do
-    bytes_a = :binary.bin_to_list(a)
-    bytes_b = :binary.bin_to_list(b)
-    pairs = Enum.zip(bytes_a, bytes_b)
-    Enum.reduce(pairs, 0, fn {x, y}, acc -> Bitwise.bor(acc, Bitwise.bxor(x, y)) end) == 0
+    do_secure_compare(a, b, 0) == 0
   end
 
   defp secure_compare(_, _), do: false
+
+  defp do_secure_compare(<<>>, <<>>, acc), do: acc
+
+  defp do_secure_compare(<<x, rest_a::binary>>, <<y, rest_b::binary>>, acc) do
+    do_secure_compare(rest_a, rest_b, Bitwise.bor(acc, Bitwise.bxor(x, y)))
+  end
 
   defp curve_supported? do
     try do

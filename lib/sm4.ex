@@ -15,8 +15,12 @@ defmodule Guomi.SM4 do
 
   @spec supported?() :: boolean()
   def supported? do
-    ciphers = :crypto.supports(:ciphers)
-    :sm4_ecb in ciphers and :sm4_cbc in ciphers
+    try do
+      ciphers = :crypto.supports(:ciphers)
+      :sm4_ecb in ciphers and :sm4_cbc in ciphers
+    rescue
+      _ -> false
+    end
   end
 
   @spec encrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
@@ -24,7 +28,7 @@ defmodule Guomi.SM4 do
     try do
       with :ok <- validate_key(key),
            {:ok, data} <- pad(plaintext, opts) do
-        {:ok, :crypto.crypto_one_time(:sm4_ecb, key, <<>>, data, true)}
+        crypto_one_time(:sm4_ecb, key, <<>>, data, true)
       else
         {:error, _} = err -> err
       end
@@ -57,7 +61,7 @@ defmodule Guomi.SM4 do
       with :ok <- validate_key(key),
            :ok <- validate_iv(iv),
            {:ok, data} <- pad(plaintext, opts) do
-        {:ok, :crypto.crypto_one_time(:sm4_cbc, key, iv, data, true)}
+        crypto_one_time(:sm4_cbc, key, iv, data, true)
       else
         {:error, _} = err -> err
       end
@@ -94,6 +98,10 @@ defmodule Guomi.SM4 do
   defp validate_block(data) when rem(byte_size(data), @block_size) == 0, do: :ok
   defp validate_block(_), do: {:error, :invalid_block_size}
 
+  defp crypto_one_time(cipher, key, iv, data, encrypt?) do
+    {:ok, :crypto.crypto_one_time(cipher, key, iv, data, encrypt?)}
+  end
+
   defp pad(data, opts) do
     case Keyword.get(opts, :padding, :pkcs7) do
       :none ->
@@ -104,12 +112,18 @@ defmodule Guomi.SM4 do
         end
 
       :pkcs7 ->
-        n = @block_size - rem(byte_size(data), @block_size)
-        pad_len = if n == 0, do: @block_size, else: n
+        pad_len = pkcs7_pad_length(data)
         {:ok, data <> :binary.copy(<<pad_len>>, pad_len)}
 
       _ ->
         {:error, :invalid_padding}
+    end
+  end
+
+  defp pkcs7_pad_length(data) do
+    case rem(byte_size(data), @block_size) do
+      0 -> @block_size
+      used -> @block_size - used
     end
   end
 

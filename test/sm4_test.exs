@@ -52,6 +52,10 @@ defmodule Guomi.SM4Test do
       not_aligned = <<1, 2, 3, 4, 5>>
       assert {:error, :invalid_block_size} = Guomi.SM4.encrypt(not_aligned, @key, padding: :none)
     end
+
+    test "encrypt rejects unsupported padding option" do
+      assert {:error, :invalid_padding} = Guomi.SM4.encrypt("test", @key, padding: :zeroes)
+    end
   end
 
   describe "CBC mode" do

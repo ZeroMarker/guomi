@@ -136,6 +136,10 @@ defmodule Guomi.SM2Test do
   end
 
   describe "encrypt/2 and decrypt/2" do
+    test "decrypt rejects ciphertext shorter than C1 plus C3" do
+      assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<1, 2, 3>>, <<0::256>>)
+    end
+
     test "encrypt/decrypt roundtrip when supported" do
       case Guomi.SM2.generate_keypair() do
         {:ok, private_key, public_key} ->
