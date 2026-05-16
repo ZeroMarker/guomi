@@ -44,10 +44,16 @@ defmodule Guomi.CLITest do
   end
 
   test "sm3 reads file input and prints hex output" do
-    {output, 0} = run_cli(["sm3", "--hex"], "abc")
+    if Guomi.SM3.supported?() do
+      {output, 0} = run_cli(["sm3", "--hex"], "abc")
 
-    assert String.trim(output) ==
-             "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+      assert String.trim(output) ==
+               "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+    else
+      {output, status} = run_cli(["sm3", "--hex"], "abc")
+      assert status != 0
+      assert output =~ "SM3 is not supported on this system"
+    end
   end
 
   test "sm4 reports missing key" do

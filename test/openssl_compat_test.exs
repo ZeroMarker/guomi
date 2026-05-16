@@ -83,44 +83,56 @@ defmodule Guomi.OpenSSLCompatTest do
   test "SM3 CLI output matches OpenSSL" do
     input = "The quick brown fox jumps over the lazy dog"
 
-    case openssl_sm3_hex(input) do
-      {:skip, _reason} ->
-        :ok
+    if Guomi.SM3.supported?() do
+      case openssl_sm3_hex(input) do
+        {:skip, _reason} ->
+          :ok
 
-      expected ->
-        {actual, 0} = run_cli(["sm3", "--hex"], input)
-        assert String.trim(actual) == expected
+        expected ->
+          {actual, 0} = run_cli(["sm3", "--hex"], input)
+          assert String.trim(actual) == expected
+      end
+    else
+      assert true
     end
   end
 
   test "SM4 ECB CLI encryption matches OpenSSL" do
     plaintext = "Hello, SM4!"
 
-    case openssl_sm4("sm4-ecb", plaintext, []) do
-      {:skip, _reason} ->
-        :ok
+    if Guomi.SM4.supported?() do
+      case openssl_sm4("sm4-ecb", plaintext, []) do
+        {:skip, _reason} ->
+          :ok
 
-      expected ->
-        {actual, 0} = run_cli(["sm4", "--key", @key_hex, "--hex"], plaintext)
-        assert Base.decode16!(String.trim(actual), case: :mixed) == expected
+        expected ->
+          {actual, 0} = run_cli(["sm4", "--key", @key_hex, "--hex"], plaintext)
+          assert Base.decode16!(String.trim(actual), case: :mixed) == expected
+      end
+    else
+      assert true
     end
   end
 
   test "SM4 CBC CLI encryption matches OpenSSL" do
     plaintext = "Test message for SM4 CBC mode verification"
 
-    case openssl_sm4("sm4-cbc", plaintext, ["-iv", @iv_hex]) do
-      {:skip, _reason} ->
-        :ok
+    if Guomi.SM4.supported?() do
+      case openssl_sm4("sm4-cbc", plaintext, ["-iv", @iv_hex]) do
+        {:skip, _reason} ->
+          :ok
 
-      expected ->
-        {actual, 0} =
-          run_cli(
-            ["sm4", "--mode", "cbc", "--key", @key_hex, "--iv", @iv_hex, "--hex"],
-            plaintext
-          )
+        expected ->
+          {actual, 0} =
+            run_cli(
+              ["sm4", "--mode", "cbc", "--key", @key_hex, "--iv", @iv_hex, "--hex"],
+              plaintext
+            )
 
-        assert Base.decode16!(String.trim(actual), case: :mixed) == expected
+          assert Base.decode16!(String.trim(actual), case: :mixed) == expected
+      end
+    else
+      assert true
     end
   end
 end

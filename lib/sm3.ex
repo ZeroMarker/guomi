@@ -8,6 +8,8 @@ defmodule Guomi.SM3 do
   @spec supported?() :: boolean()
   def supported? do
     :sm3 in :crypto.supports(:hashs)
+  rescue
+    _ -> false
   end
 
   @spec hash(input()) :: binary()

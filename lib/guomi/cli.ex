@@ -58,6 +58,7 @@ defmodule Guomi.CLI do
 
   # SM3 command handlers
   defp handle_sm3([]) do
+    ensure_sm3_supported!()
     input = read_input([])
     hash = Guomi.SM3.hash_hex(input)
     IO.puts(hash)
@@ -69,6 +70,7 @@ defmodule Guomi.CLI do
     if opts[:help] do
       print_sm3_help()
     else
+      ensure_sm3_supported!()
       input = read_input(remaining)
 
       if opts[:hex] do
@@ -322,6 +324,12 @@ defmodule Guomi.CLI do
 
   defp sm4_output_hex?(opts, hex?, decrypt?) do
     Keyword.get(opts, :output_hex, false) or (hex? and not decrypt?)
+  end
+
+  defp ensure_sm3_supported! do
+    unless Guomi.SM3.supported?() do
+      fail("SM3 is not supported on this system")
+    end
   end
 
   defp parse_hex_or_exit(nil, _), do: nil

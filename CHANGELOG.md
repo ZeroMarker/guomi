@@ -7,6 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-16
+
+### Changed
+
+- Made SM3, SM4, CLI, and OpenSSL compatibility tests runtime-aware when CI OpenSSL lacks Guomi algorithm support.
+
+### Fixed
+
+- Added a friendly SM3 CLI error when the runtime does not support SM3.
+
 ## [0.4.0] - 2026-05-16
 
 ### Added
@@ -85,7 +95,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ZeroMarker/guomi/compare/v0.1.0...v0.2.0

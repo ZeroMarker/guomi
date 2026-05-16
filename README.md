@@ -38,7 +38,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.4.0"}
+    {:guomi, "~> 0.4.1"}
   ]
 end
 ```
@@ -234,6 +234,10 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.4.1] - 2026-05-16
+- Made SM3/SM4 tests runtime-aware when CI OpenSSL lacks Guomi algorithms
+- Added friendly SM3 CLI unsupported-runtime errors
+
 #### [0.4.0] - 2026-05-16
 - Unified Hex workflow for CI checks and release publishing
 - Improved CLI validation and explicit SM4 hex input/output flags
@@ -251,6 +255,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ZeroMarker/guomi/compare/v0.1.0...v0.2.0
