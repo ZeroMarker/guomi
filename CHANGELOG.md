@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-16
+
+### Changed
+
+- Refactored CLI, SM2, SM4, and OpenSSL compatibility test code to satisfy Credo strict checks.
+- Normalized source file line endings for Credo consistency checks.
+
 ## [0.4.1] - 2026-05-16
 
 ### Changed
@@ -95,7 +102,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...v0.3.0

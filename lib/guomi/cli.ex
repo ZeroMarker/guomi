@@ -19,13 +19,11 @@ defmodule Guomi.CLI do
   @version Mix.Project.config()[:version]
 
   def main(args) do
-    try do
-      run(args)
-    rescue
-      e ->
-        IO.puts(:stderr, "Error: #{Exception.message(e)}")
-        System.halt(1)
-    end
+    run(args)
+  rescue
+    e ->
+      IO.puts(:stderr, "Error: #{Exception.message(e)}")
+      System.halt(1)
   end
 
   def run([]) do

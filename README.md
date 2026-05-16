@@ -38,7 +38,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.4.1"}
+    {:guomi, "~> 0.4.2"}
   ]
 end
 ```
@@ -234,6 +234,10 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.4.2] - 2026-05-16
+- Fixed Credo strict warnings in CLI, SM2, SM4, and OpenSSL compatibility tests
+- Normalized source line endings for Credo consistency checks
+
 #### [0.4.1] - 2026-05-16
 - Made SM3/SM4 tests runtime-aware when CI OpenSSL lacks Guomi algorithms
 - Added friendly SM3 CLI unsupported-runtime errors
@@ -255,6 +259,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...v0.3.0

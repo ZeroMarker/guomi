@@ -15,12 +15,10 @@ defmodule Guomi.SM4 do
 
   @spec supported?() :: boolean()
   def supported? do
-    try do
-      ciphers = :crypto.supports(:ciphers)
-      :sm4_ecb in ciphers and :sm4_cbc in ciphers
-    rescue
-      _ -> false
-    end
+    ciphers = :crypto.supports(:ciphers)
+    :sm4_ecb in ciphers and :sm4_cbc in ciphers
+  rescue
+    _ -> false
   end
 
   @spec encrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
@@ -119,31 +117,38 @@ defmodule Guomi.SM4 do
         {:ok, data}
 
       :pkcs7 ->
-        size = byte_size(data)
-
-        if size == 0 do
-          {:error, :invalid_padding}
-        else
-          pad_len = :binary.last(data)
-
-          cond do
-            pad_len < 1 or pad_len > @block_size ->
-              {:error, :invalid_padding}
-
-            pad_len > size ->
-              {:error, :invalid_padding}
-
-            valid_pkcs7_padding?(data, pad_len) ->
-              <<plain::binary-size(size - pad_len), _pad::binary-size(pad_len)>> = data
-              {:ok, plain}
-
-            true ->
-              {:error, :invalid_padding}
-          end
-        end
+        unpad_pkcs7(data)
 
       _ ->
         {:error, :invalid_padding}
+    end
+  end
+
+  defp unpad_pkcs7(<<>>), do: {:error, :invalid_padding}
+
+  defp unpad_pkcs7(data) do
+    data
+    |> :binary.last()
+    |> validate_pkcs7_padding_length(byte_size(data))
+    |> remove_pkcs7_padding(data)
+  end
+
+  defp validate_pkcs7_padding_length(pad_len, size)
+       when pad_len in 1..@block_size and pad_len <= size do
+    {:ok, pad_len}
+  end
+
+  defp validate_pkcs7_padding_length(_pad_len, _size), do: {:error, :invalid_padding}
+
+  defp remove_pkcs7_padding({:error, _} = err, _data), do: err
+
+  defp remove_pkcs7_padding({:ok, pad_len}, data) do
+    if valid_pkcs7_padding?(data, pad_len) do
+      size = byte_size(data)
+      <<plain::binary-size(size - pad_len), _pad::binary-size(pad_len)>> = data
+      {:ok, plain}
+    else
+      {:error, :invalid_padding}
     end
   end
 

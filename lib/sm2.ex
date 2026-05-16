@@ -121,9 +121,7 @@ defmodule Guomi.SM2 do
   """
   @spec encrypt(binary() | iodata(), binary()) :: {:ok, binary()} | {:error, error_reason()}
   def encrypt(plaintext, public_key) do
-    if not supported?() do
-      {:error, :unsupported}
-    else
+    if supported?() do
       try do
         data = IO.iodata_to_binary(plaintext)
 
@@ -152,6 +150,8 @@ defmodule Guomi.SM2 do
       rescue
         _ -> {:error, :decryption_failed}
       end
+    else
+      {:error, :unsupported}
     end
   end
 
@@ -179,9 +179,7 @@ defmodule Guomi.SM2 do
   end
 
   def decrypt(ciphertext, private_key) do
-    if not supported?() do
-      {:error, :unsupported}
-    else
+    if supported?() do
       try do
         # Ciphertext: C1 (65-byte ephemeral public key) || C2 || C3 (32-byte MAC).
         <<ephemeral_pub::binary-size(65), encrypted_data::binary-size(byte_size(ciphertext) - 97),
@@ -202,6 +200,8 @@ defmodule Guomi.SM2 do
       rescue
         _ -> {:error, :decryption_failed}
       end
+    else
+      {:error, :unsupported}
     end
   end
 
@@ -256,10 +256,8 @@ defmodule Guomi.SM2 do
   end
 
   defp curve_supported? do
-    try do
-      @curve in :crypto.supports(:curves)
-    rescue
-      _ -> false
-    end
+    @curve in :crypto.supports(:curves)
+  rescue
+    _ -> false
   end
 end

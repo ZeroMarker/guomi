@@ -67,18 +67,31 @@ defmodule Guomi.OpenSSLCompatTest do
   end
 
   defp openssl_sm4(command, plaintext, args) do
-    with_temp_file(plaintext, fn input_path ->
-      with_temp_output(fn output_path ->
-        case run_openssl(
-               [command, "-K", @key_hex, "-in", input_path, "-out", output_path] ++ args
-             ) do
-          {:skip, _} = skip -> skip
-          {_output, 0} -> File.read!(output_path)
-          {_output, _status} -> {:skip, :sm4_missing}
-        end
-      end)
+    with_temp_pair(plaintext, fn input_path, output_path ->
+      command
+      |> openssl_sm4_args(input_path, output_path, args)
+      |> run_openssl()
+      |> read_openssl_output(output_path, :sm4_missing)
     end)
   end
+
+  defp with_temp_pair(input, fun) do
+    with_temp_file(input, fn input_path ->
+      with_temp_output(fn output_path -> fun.(input_path, output_path) end)
+    end)
+  end
+
+  defp openssl_sm4_args(command, input_path, output_path, args) do
+    [command, "-K", @key_hex, "-in", input_path, "-out", output_path] ++ args
+  end
+
+  defp read_openssl_output({:skip, _} = skip, _output_path, _missing_reason), do: skip
+
+  defp read_openssl_output({_output, 0}, output_path, _missing_reason),
+    do: File.read!(output_path)
+
+  defp read_openssl_output({_output, _status}, _output_path, missing_reason),
+    do: {:skip, missing_reason}
 
   test "SM3 CLI output matches OpenSSL" do
     input = "The quick brown fox jumps over the lazy dog"
