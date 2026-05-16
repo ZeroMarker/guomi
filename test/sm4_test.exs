@@ -48,6 +48,22 @@ defmodule Guomi.SM4Test do
       assert {:error, :invalid_block_size} = Guomi.SM4.decrypt(short_ciphertext, @key)
     end
 
+    test "decrypt rejects malformed pkcs7 padding bytes" do
+      if Guomi.SM4.supported?() do
+        malformed_plaintext = "123456789012" <> <<4, 4, 4, 3>>
+        {:ok, ciphertext} = Guomi.SM4.encrypt(malformed_plaintext, @key, padding: :none)
+        assert {:error, :invalid_padding} = Guomi.SM4.decrypt(ciphertext, @key)
+      end
+    end
+
+    test "decrypt rejects out-of-range pkcs7 padding length" do
+      if Guomi.SM4.supported?() do
+        malformed_plaintext = "123456789012345" <> <<17>>
+        {:ok, ciphertext} = Guomi.SM4.encrypt(malformed_plaintext, @key, padding: :none)
+        assert {:error, :invalid_padding} = Guomi.SM4.decrypt(ciphertext, @key)
+      end
+    end
+
     test "encrypt with :none padding requires block-aligned input" do
       not_aligned = <<1, 2, 3, 4, 5>>
       assert {:error, :invalid_block_size} = Guomi.SM4.encrypt(not_aligned, @key, padding: :none)

@@ -122,6 +122,23 @@ defmodule Guomi.SM2Test do
       end
     end
 
+    test "documents current raw signature format" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          message = "format check"
+
+          {:ok, <<r::binary-size(32), s::binary-size(32)>> = signature} =
+            Guomi.SM2.sign(message, private_key)
+
+          assert byte_size(r) == 32
+          assert byte_size(s) == 32
+          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
     test "handles iodata message" do
       case Guomi.SM2.generate_keypair() do
         {:ok, private_key, public_key} ->

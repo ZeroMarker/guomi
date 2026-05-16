@@ -25,31 +25,23 @@ defmodule Guomi.SM4 do
 
   @spec encrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
   def encrypt(plaintext, key, opts \\ []) when is_binary(plaintext) and is_binary(key) do
-    try do
-      with :ok <- validate_key(key),
-           {:ok, data} <- pad(plaintext, opts) do
-        crypto_one_time(:sm4_ecb, key, <<>>, data, true)
-      else
-        {:error, _} = err -> err
-      end
-    rescue
-      _ -> {:error, :unsupported}
+    with :ok <- validate_key(key),
+         {:ok, data} <- pad(plaintext, opts) do
+      crypto_one_time(:sm4_ecb, key, <<>>, data, true)
+    else
+      {:error, _} = err -> err
     end
   end
 
   @spec decrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
   def decrypt(ciphertext, key, opts \\ []) when is_binary(ciphertext) and is_binary(key) do
-    try do
-      with :ok <- validate_key(key),
-           :ok <- validate_block(ciphertext),
-           plaintext <- :crypto.crypto_one_time(:sm4_ecb, key, <<>>, ciphertext, false),
-           {:ok, out} <- unpad(plaintext, opts) do
-        {:ok, out}
-      else
-        {:error, _} = err -> err
-      end
-    rescue
-      _ -> {:error, :unsupported}
+    with :ok <- validate_key(key),
+         :ok <- validate_block(ciphertext),
+         {:ok, plaintext} <- crypto_one_time(:sm4_ecb, key, <<>>, ciphertext, false),
+         {:ok, out} <- unpad(plaintext, opts) do
+      {:ok, out}
+    else
+      {:error, _} = err -> err
     end
   end
 
@@ -57,16 +49,12 @@ defmodule Guomi.SM4 do
           {:ok, binary()} | {:error, error_reason()}
   def encrypt_cbc(plaintext, key, iv, opts \\ [])
       when is_binary(plaintext) and is_binary(key) and is_binary(iv) do
-    try do
-      with :ok <- validate_key(key),
-           :ok <- validate_iv(iv),
-           {:ok, data} <- pad(plaintext, opts) do
-        crypto_one_time(:sm4_cbc, key, iv, data, true)
-      else
-        {:error, _} = err -> err
-      end
-    rescue
-      _ -> {:error, :unsupported}
+    with :ok <- validate_key(key),
+         :ok <- validate_iv(iv),
+         {:ok, data} <- pad(plaintext, opts) do
+      crypto_one_time(:sm4_cbc, key, iv, data, true)
+    else
+      {:error, _} = err -> err
     end
   end
 
@@ -74,18 +62,14 @@ defmodule Guomi.SM4 do
           {:ok, binary()} | {:error, error_reason()}
   def decrypt_cbc(ciphertext, key, iv, opts \\ [])
       when is_binary(ciphertext) and is_binary(key) and is_binary(iv) do
-    try do
-      with :ok <- validate_key(key),
-           :ok <- validate_iv(iv),
-           :ok <- validate_block(ciphertext),
-           plaintext <- :crypto.crypto_one_time(:sm4_cbc, key, iv, ciphertext, false),
-           {:ok, out} <- unpad(plaintext, opts) do
-        {:ok, out}
-      else
-        {:error, _} = err -> err
-      end
-    rescue
-      _ -> {:error, :unsupported}
+    with :ok <- validate_key(key),
+         :ok <- validate_iv(iv),
+         :ok <- validate_block(ciphertext),
+         {:ok, plaintext} <- crypto_one_time(:sm4_cbc, key, iv, ciphertext, false),
+         {:ok, out} <- unpad(plaintext, opts) do
+      {:ok, out}
+    else
+      {:error, _} = err -> err
     end
   end
 
@@ -100,6 +84,8 @@ defmodule Guomi.SM4 do
 
   defp crypto_one_time(cipher, key, iv, data, encrypt?) do
     {:ok, :crypto.crypto_one_time(cipher, key, iv, data, encrypt?)}
+  rescue
+    ErlangError -> {:error, :unsupported}
   end
 
   defp pad(data, opts) do
@@ -147,19 +133,38 @@ defmodule Guomi.SM4 do
             pad_len > size ->
               {:error, :invalid_padding}
 
-            true ->
-              <<plain::binary-size(size - pad_len), pad::binary-size(pad_len)>> = data
+            valid_pkcs7_padding?(data, pad_len) ->
+              <<plain::binary-size(size - pad_len), _pad::binary-size(pad_len)>> = data
+              {:ok, plain}
 
-              if pad == :binary.copy(<<pad_len>>, pad_len) do
-                {:ok, plain}
-              else
-                {:error, :invalid_padding}
-              end
+            true ->
+              {:error, :invalid_padding}
           end
         end
 
       _ ->
         {:error, :invalid_padding}
     end
+  end
+
+  defp valid_pkcs7_padding?(data, pad_len) do
+    size = byte_size(data)
+    <<block::binary-size(@block_size)>> = :binary.part(data, size - @block_size, @block_size)
+    padding_start = @block_size - pad_len
+
+    validate_pkcs7_block(block, pad_len, padding_start, 0, 0) == 0
+  end
+
+  defp validate_pkcs7_block(<<>>, _pad_len, _padding_start, _index, acc), do: acc
+
+  defp validate_pkcs7_block(<<byte, rest::binary>>, pad_len, padding_start, index, acc) do
+    diff =
+      if index >= padding_start do
+        Bitwise.bxor(byte, pad_len)
+      else
+        0
+      end
+
+    validate_pkcs7_block(rest, pad_len, padding_start, index + 1, Bitwise.bor(acc, diff))
   end
 end

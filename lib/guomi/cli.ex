@@ -53,15 +53,12 @@ defmodule Guomi.CLI do
   end
 
   def run([command | _]) do
-    IO.puts(:stderr, "Unknown command: #{command}")
-    IO.puts(:stderr, "Run 'guomi help' for usage information.")
-    System.halt(1)
+    fail(["Unknown command: #{command}", "Run 'guomi help' for usage information."])
   end
 
   # SM3 command handlers
   defp handle_sm3([]) do
-    # Read from stdin
-    input = IO.read(:stdio, :eof)
+    input = read_input([])
     hash = Guomi.SM3.hash_hex(input)
     IO.puts(hash)
   end
@@ -72,21 +69,7 @@ defmodule Guomi.CLI do
     if opts[:help] do
       print_sm3_help()
     else
-      # Treat remaining args as input (file or string)
-      input =
-        case remaining do
-          [file] when file in ["-", "--"] ->
-            IO.read(:stdio, :eof)
-
-          [file] ->
-            File.read!(file)
-
-          [] ->
-            IO.read(:stdio, :eof)
-
-          _ ->
-            Enum.join(remaining, " ")
-        end
+      input = read_input(remaining)
 
       if opts[:hex] do
         hash = Guomi.SM3.hash_hex(input)
@@ -112,6 +95,8 @@ defmodule Guomi.CLI do
           iv: :string,
           decrypt: :boolean,
           hex: :boolean,
+          input_hex: :boolean,
+          output_hex: :boolean,
           padding: :string,
           help: :boolean
         ]
@@ -121,49 +106,43 @@ defmodule Guomi.CLI do
       print_sm4_help()
     else
       mode = Keyword.get(opts, :mode, "ecb")
-      key = parse_hex_or_exit(opts[:key], "key")
+      key = required_hex_or_exit(opts[:key], "key")
+      iv = validate_sm4_iv(mode, opts[:iv])
       padding = parse_padding_or_exit(Keyword.get(opts, :padding, "pkcs7"))
-
-      input =
-        case remaining do
-          [] -> IO.read(:stdio, :eof)
-          [file] when file in ["-", "--"] -> IO.read(:stdio, :eof)
-          [file] -> File.read!(file)
-          _ -> Enum.join(remaining, " ")
-        end
+      decrypt? = Keyword.get(opts, :decrypt, false)
+      hex? = Keyword.get(opts, :hex, false)
+      input_hex? = sm4_input_hex?(opts, hex?, decrypt?)
+      output_hex? = sm4_output_hex?(opts, hex?, decrypt?)
+      input = read_input(remaining)
 
       result =
-        if opts[:decrypt] do
-          decrypt_sm4(input, key, mode, opts[:iv], padding, opts[:hex])
+        if decrypt? do
+          decrypt_sm4(input, key, mode, iv, padding, input_hex?)
         else
-          encrypt_sm4(input, key, mode, opts[:iv], padding)
+          encrypt_sm4(input, key, mode, iv, padding, input_hex?)
         end
 
       case result do
         {:ok, output} ->
-          if opts[:hex] do
-            IO.puts(Base.encode16(output, case: :lower))
-          else
-            IO.write(output)
-          end
+          write_output(output, output_hex?)
 
         {:error, reason} ->
-          IO.puts(:stderr, "Error: #{format_sm4_error(reason)}")
-          System.halt(1)
+          fail(format_sm4_error(reason))
       end
     end
   end
 
-  defp encrypt_sm4(input, key, "ecb", _iv, padding) do
+  defp encrypt_sm4(input, key, "ecb", _iv, padding, input_hex?) do
+    input = if input_hex?, do: parse_hex_or_exit(input, "plaintext"), else: input
     Guomi.SM4.encrypt(input, key, padding: padding)
   end
 
-  defp encrypt_sm4(input, key, "cbc", iv, padding) do
-    iv = parse_hex_or_exit(iv, "iv")
+  defp encrypt_sm4(input, key, "cbc", iv, padding, input_hex?) do
+    input = if input_hex?, do: parse_hex_or_exit(input, "plaintext"), else: input
     Guomi.SM4.encrypt_cbc(input, key, iv, padding: padding)
   end
 
-  defp encrypt_sm4(_input, _key, mode, _iv, _padding) do
+  defp encrypt_sm4(_input, _key, mode, _iv, _padding, _input_hex?) do
     {:error, {:invalid_mode, mode}}
   end
 
@@ -174,7 +153,6 @@ defmodule Guomi.CLI do
 
   defp decrypt_sm4(input, key, "cbc", iv, padding, hex_input) do
     ciphertext = if hex_input, do: parse_hex_or_exit(input, "ciphertext"), else: input
-    iv = parse_hex_or_exit(iv, "iv")
     Guomi.SM4.decrypt_cbc(ciphertext, key, iv, padding: padding)
   end
 
@@ -240,30 +218,30 @@ defmodule Guomi.CLI do
         IO.puts(Base.encode16(public_key, case: :lower))
 
       {:error, :unsupported} ->
-        IO.puts(:stderr, "Error: SM2 is not supported on this system.")
-        IO.puts(:stderr, "Please ensure OpenSSL 3.0+ with SM2 support is installed.")
-        System.halt(1)
+        fail([
+          "SM2 is not supported on this system.",
+          "Please ensure OpenSSL 3.0+ with SM2 support is installed."
+        ])
     end
   end
 
   defp do_sign(args, opts) do
     message = get_message(args, opts)
-    private_key = parse_hex_or_exit(opts[:private_key], "private-key")
+    private_key = required_hex_or_exit(opts[:private_key], "private-key")
 
     case Guomi.SM2.sign(message, private_key) do
       {:ok, signature} ->
         IO.puts(Base.encode16(signature, case: :lower))
 
       {:error, :unsupported} ->
-        IO.puts(:stderr, "Error: SM2 signing is not supported on this system.")
-        System.halt(1)
+        fail("SM2 signing is not supported on this system.")
     end
   end
 
   defp do_verify(args, opts) do
     message = get_message(args, opts)
-    signature = parse_hex_or_exit(opts[:signature], "signature")
-    public_key = parse_hex_or_exit(opts[:public_key], "public-key")
+    signature = required_hex_or_exit(opts[:signature], "signature")
+    public_key = required_hex_or_exit(opts[:public_key], "public-key")
 
     case Guomi.SM2.verify(message, signature, public_key) do
       {:ok, true} ->
@@ -275,22 +253,20 @@ defmodule Guomi.CLI do
         System.halt(1)
 
       {:error, :unsupported} ->
-        IO.puts(:stderr, "Error: SM2 verification is not supported on this system.")
-        System.halt(1)
+        fail("SM2 verification is not supported on this system.")
     end
   end
 
   defp do_encrypt(args, opts) do
     message = get_message(args, opts)
-    public_key = parse_hex_or_exit(opts[:public_key], "public-key")
+    public_key = required_hex_or_exit(opts[:public_key], "public-key")
 
     case Guomi.SM2.encrypt(message, public_key) do
       {:ok, ciphertext} ->
         IO.puts(Base.encode16(ciphertext, case: :lower))
 
       {:error, reason} ->
-        IO.puts(:stderr, "Error: #{format_sm2_error(reason)}")
-        System.halt(1)
+        fail(format_sm2_error(reason))
     end
   end
 
@@ -300,6 +276,9 @@ defmodule Guomi.CLI do
         {nil, [file]} when file not in ["-", "--"] ->
           File.read!(file)
 
+        {nil, []} ->
+          required_hex_or_exit(nil, "ciphertext")
+
         {ciph, _} when is_binary(ciph) ->
           ciph
 
@@ -308,29 +287,41 @@ defmodule Guomi.CLI do
       end
 
     ciphertext = parse_hex_or_exit(ciphertext, "ciphertext")
-    private_key = parse_hex_or_exit(opts[:private_key], "private-key")
+    private_key = required_hex_or_exit(opts[:private_key], "private-key")
 
     case Guomi.SM2.decrypt(ciphertext, private_key) do
       {:ok, plaintext} ->
         IO.write(plaintext)
 
       {:error, reason} ->
-        IO.puts(:stderr, "Error: #{format_sm2_error(reason)}")
-        System.halt(1)
+        fail(format_sm2_error(reason))
     end
   end
 
   defp get_message(args, opts) do
     case {opts[:message], args} do
-      {nil, [file]} when file not in ["-", "--"] ->
-        File.read!(file)
-
       {msg, _} when is_binary(msg) ->
         msg
 
       _ ->
-        IO.read(:stdio, :eof)
+        read_input(args)
     end
+  end
+
+  defp read_input([]), do: IO.read(:stdio, :eof)
+  defp read_input([file]) when file in ["-", "--"], do: IO.read(:stdio, :eof)
+  defp read_input([file]), do: File.read!(file)
+  defp read_input(args), do: Enum.join(args, " ")
+
+  defp write_output(output, true), do: IO.puts(Base.encode16(output, case: :lower))
+  defp write_output(output, false), do: IO.write(output)
+
+  defp sm4_input_hex?(opts, hex?, decrypt?) do
+    Keyword.get(opts, :input_hex, false) or (hex? and decrypt?)
+  end
+
+  defp sm4_output_hex?(opts, hex?, decrypt?) do
+    Keyword.get(opts, :output_hex, false) or (hex? and not decrypt?)
   end
 
   defp parse_hex_or_exit(nil, _), do: nil
@@ -341,18 +332,36 @@ defmodule Guomi.CLI do
         binary
 
       :error ->
-        IO.puts(:stderr, "Error: Invalid hex encoding for #{name}")
-        System.halt(1)
+        fail("Invalid hex encoding for #{name}")
     end
   end
+
+  defp required_hex_or_exit(nil, name) do
+    fail("Missing required option --#{name}")
+  end
+
+  defp required_hex_or_exit(hex_string, name), do: parse_hex_or_exit(hex_string, name)
+
+  defp validate_sm4_iv("cbc", nil) do
+    fail("Missing required option --iv")
+  end
+
+  defp validate_sm4_iv("cbc", iv), do: parse_hex_or_exit(iv, "iv")
+  defp validate_sm4_iv(_mode, _iv), do: nil
 
   defp parse_padding_or_exit("pkcs7"), do: :pkcs7
   defp parse_padding_or_exit("none"), do: :none
 
   defp parse_padding_or_exit(padding) do
-    IO.puts(:stderr, "Error: Invalid padding option: #{padding} (use 'pkcs7' or 'none')")
+    fail("Invalid padding option: #{padding} (use 'pkcs7' or 'none')")
+  end
+
+  defp fail(messages) when is_list(messages) do
+    Enum.each(messages, &IO.puts(:stderr, "Error: #{&1}"))
     System.halt(1)
   end
+
+  defp fail(message), do: fail([message])
 
   defp format_sm4_error(:invalid_key_size), do: "Invalid key size (must be 16 bytes)"
   defp format_sm4_error(:invalid_iv_size), do: "Invalid IV size (must be 16 bytes)"
@@ -439,7 +448,9 @@ defmodule Guomi.CLI do
         --key <hex>       Encryption key (16 bytes hex, required)
         --iv <hex>        Initialization vector (16 bytes hex, required for CBC)
         --decrypt         Decrypt instead of encrypt
-        --hex             Input/output as hexadecimal
+        --hex             Compatibility shortcut: output hex when encrypting, input hex when decrypting
+        --input-hex       Treat input as hexadecimal text
+        --output-hex      Print output as hexadecimal text
         --padding <pad>   Padding: pkcs7 (default) or none
         --help            Show this help message
 
@@ -454,8 +465,8 @@ defmodule Guomi.CLI do
         # Encrypt with CBC
         echo "secret" | guomi sm4 --mode cbc --key 0123456789abcdef0123456789abcdef --iv 00000000000000000000000000000000
 
-        # Decrypt (output as hex)
-        guomi sm4 --decrypt --hex --key 0123456789abcdef0123456789abcdef < ciphertext.bin
+        # Decrypt hex ciphertext
+        guomi sm4 --decrypt --hex --key 0123456789abcdef0123456789abcdef < ciphertext.hex
 
         # Decrypt CBC mode
         guomi sm4 --decrypt --mode cbc --key 0123456789abcdef0123456789abcdef --iv 00000000000000000000000000000000 < ciphertext.bin

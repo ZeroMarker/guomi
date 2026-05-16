@@ -1,6 +1,5 @@
 # Guomi
 
-[![CI](https://github.com/ZeroMarker/guomi/actions/workflows/ci.yml/badge.svg)](https://github.com/ZeroMarker/guomi/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/guomi.svg)](https://hex.pm/packages/guomi)
 [![Hex.pm](https://img.shields.io/hexpm/dt/guomi.svg)](https://hex.pm/packages/guomi)
 [![Hex.pm](https://img.shields.io/hexpm/l/guomi.svg)](https://github.com/ZeroMarker/guomi/blob/main/LICENSE)
@@ -21,6 +20,17 @@
 - Erlang/OTP 24+
 - OpenSSL 3.0+（用于更完整国密算法支持）
 
+## 兼容性矩阵
+
+| 能力 | 运行时要求 | 说明 |
+|------|------------|------|
+| SM3 | Erlang/OTP `:crypto` 暴露 `:sm3` | 可通过 `Guomi.SM3.supported?/0` 检测 |
+| SM4 | Erlang/OTP `:crypto` 暴露 `:sm4_ecb` 和 `:sm4_cbc` | 可通过 `Guomi.SM4.supported?/0` 检测 |
+| SM2 密钥/签名 | OpenSSL/Erlang 暴露 `:sm2` 曲线与 SM3 | 当前使用 SM3 预哈希和 OTP ECDSA 原语，签名格式为 64 字节 raw `r || s` |
+| SM2 加密/解密 | OpenSSL/Erlang 暴露 `:sm2` 曲线与 SM3 | 当前为 Guomi 内部 `C1 || C2 || C3` 格式，不声明与 OpenSSL 密文互通 |
+
+运行时能力取决于 Erlang/OTP 编译时链接的 OpenSSL 版本和配置。生产环境应在启动或调用前使用 `Guomi.supported/0` 或各模块的 `supported?/0` 检测。
+
 ## 安装
 
 ### 从 Hex 安装
@@ -28,7 +38,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.3.0"}
+    {:guomi, "~> 0.4.0"}
   ]
 end
 ```
@@ -73,6 +83,8 @@ Guomi.SM3.supported?()
 
 ### SM4 加密
 
+> 安全提示：ECB 模式只适合测试或兼容场景，不建议用于新数据加密。CBC 模式必须为每次加密使用不可预测且不复用的 16 字节 IV。
+
 ```elixir
 key = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
 plain = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
@@ -96,6 +108,8 @@ Guomi.SM4.supported?()
 ```
 
 ### SM2 签名和加密
+
+> 兼容性提示：当前 SM2 签名使用 SM3 预哈希和 raw `r || s` 签名格式，未暴露用户 ID/ZA 参数。SM2 加密使用本库内部格式，适合 Guomi 自身加解密往返，不应假定可与 OpenSSL 或其他 SM2 实现互通。
 
 ```elixir
 # 生成密钥对
@@ -151,11 +165,14 @@ mix escript.build
 echo -n "hello" | guomi sm3 --hex
 #=> 5897d5a782929dcdbf5e8fdb8e23d2781b5a1f5e8236e1c48e11c7b730a1e8f0
 
-# SM4 加密
+# SM4 加密，输出 hex 密文
 echo "secret" | guomi sm4 --key 0123456789abcdef0123456789abcdef --hex
 
-# SM4 解密
+# SM4 解密，读取 hex 密文并输出明文
 guomi sm4 --decrypt --hex --key 0123456789abcdef0123456789abcdef < ciphertext.hex
+
+# 显式控制 SM4 hex 输入/输出
+echo -n "736563726574" | guomi sm4 --input-hex --output-hex --key 0123456789abcdef0123456789abcdef
 
 # SM2 生成密钥对
 guomi sm2 --generate
@@ -172,6 +189,12 @@ guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
 运行 `guomi help` 或 `guomi <command> --help` 查看更多选项。
 
 ## 开发
+
+### 安装依赖
+
+```bash
+mix deps.get
+```
 
 ### 运行测试
 
@@ -211,7 +234,13 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
-#### [0.3.0] - Unreleased
+#### [0.4.0] - 2026-05-16
+- Unified Hex workflow for CI checks and release publishing
+- Improved CLI validation and explicit SM4 hex input/output flags
+- Added ExUnit CLI and OpenSSL compatibility tests
+- Documented SM2 compatibility limits and SM4 security caveats
+
+#### [0.3.0] - 2026-04-05
 - CLI tool with commands for SM2, SM3, and SM4 operations
 - Version and help commands for CLI
 
@@ -222,7 +251,8 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
-[0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...HEAD
+[0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/ZeroMarker/guomi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ZeroMarker/guomi/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ZeroMarker/guomi/releases/tag/v0.1.0
 
@@ -243,7 +273,15 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 1. **SM2 运行时依赖** - 需要 OpenSSL 3.0+ 且编译时启用 SM2 曲线支持
 2. **Windows 兼容性** - 部分 OpenSSL 功能在 Windows 上可能受限
-3. **SM2 加密性能** - 当前实现使用简化 KDF，长消息加密性能有待优化
+3. **SM2 互操作性** - 当前 SM2 签名与加密 API 固定为本库支持的格式，未覆盖完整标准互通参数
+4. **SM2 加密性能** - 当前实现使用简化 KDF，长消息加密性能有待优化
+
+## 安全注意事项
+
+- 不要在新设计中使用 ECB 模式保护敏感数据。
+- CBC 模式必须为每次加密使用新的 16 字节 IV，且同一 key 下不得复用 IV。
+- SM2 支持依赖运行时 OpenSSL 能力；部署前应检测 `supported?/0`。
+- 当前 SM2 加密格式用于 Guomi 内部往返，不应作为跨实现标准 SM2 密文格式。
 
 ## FAQ
 

@@ -4,11 +4,22 @@ defmodule Guomi.SM2 do
 
   SM2 is a Chinese commercial cryptographic algorithm standard, including:
   - Key pair generation
-  - Digital signature (SM2 with SM3 hash)
-  - Encryption/Decryption (SM2 encryption with SM3 KDF)
+  - Digital signature helpers using SM3 prehashing and OTP ECDSA primitives
+  - Encryption/decryption helpers using an internal ECDH + SM3 KDF construction
 
   If the runtime/OpenSSL does not expose SM2 primitives, APIs return
   `{:error, :unsupported}`.
+
+  ## Compatibility
+
+  `sign/2` and `verify/3` currently operate on raw 64-byte ECDSA-style
+  signatures over an SM3 digest. They do not expose the SM2 user ID/ZA
+  parameterization used by some interoperable SM2 signature profiles.
+
+  `encrypt/2` and `decrypt/2` use this package's internal ciphertext format:
+  `C1 || C2 || C3`, where `C1` is a 65-byte ephemeral public key and `C3` is an
+  SM3 MAC. This format is intended for Guomi-to-Guomi round trips and should not
+  be assumed to interoperate with OpenSSL or other SM2 implementations.
 
   ## Example
 
