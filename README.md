@@ -4,7 +4,7 @@
 [![Hex.pm](https://img.shields.io/hexpm/dt/guomi.svg)](https://hex.pm/packages/guomi)
 [![Hex.pm](https://img.shields.io/hexpm/l/guomi.svg)](https://github.com/ZeroMarker/guomi/blob/main/LICENSE)
 
-国密算法 Elixir 实现。本库优先使用 Erlang/OTP `:crypto` 能力，并在运行时探测算法可用性。
+国密算法纯 Elixir 实现（GM/T 0002-2012, GM/T 0003-2012, GM/T 0004-2012），无需外部依赖。
 
 ## 支持状态
 
@@ -18,18 +18,17 @@
 
 - Elixir 1.14+
 - Erlang/OTP 24+
-- OpenSSL 3.0+（用于更完整国密算法支持）
 
 ## 兼容性矩阵
 
-| 能力 | 运行时要求 | 说明 |
-|------|------------|------|
-| SM3 | Erlang/OTP `:crypto` 暴露 `:sm3` | 可通过 `Guomi.SM3.supported?/0` 检测 |
-| SM4 | Erlang/OTP `:crypto` 暴露 `:sm4_ecb` 和 `:sm4_cbc` | 可通过 `Guomi.SM4.supported?/0` 检测 |
-| SM2 密钥/签名 | OpenSSL/Erlang 暴露 `:sm2` 曲线与 SM3 | 当前使用 SM3 预哈希和 OTP ECDSA 原语，签名格式为 64 字节 raw `r || s` |
-| SM2 加密/解密 | OpenSSL/Erlang 暴露 `:sm2` 曲线与 SM3 | 当前为 Guomi 内部 `C1 || C2 || C3` 格式，不声明与 OpenSSL 密文互通 |
+所有算法均为纯 Elixir 实现，**无需运行时 OpenSSL 国密支持**。`supported?/0` 在所有受支持的 Erlang/OTP 版本上均返回 `true`。
 
-运行时能力取决于 Erlang/OTP 编译时链接的 OpenSSL 版本和配置。生产环境应在启动或调用前使用 `Guomi.supported/0` 或各模块的 `supported?/0` 检测。
+| 能力 | 说明 |
+|------|------|
+| SM3 | 纯 Elixir 实现（GM/T 0004-2012 压缩函数），32 字节摘要 |
+| SM4 ECB/CBC | 纯 Elixir 实现（GM/T 0002-2012 S-box 与密钥扩展），支持 `:pkcs7` 与 `:none` 填充 |
+| SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算（Jacobian 坐标系），SM3 预哈希，64 字节 raw `r || s` 签名 |
+| SM2 加密/解密 | 纯 Elixir ECDH + SM3 KDF + XOR + SM3 MAC，内部 `C1 || C2 || C3` 格式 |
 
 ## 安装
 
@@ -38,7 +37,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.4.2"}
+    {:guomi, "~> 0.5.0"}
   ]
 end
 ```
@@ -76,9 +75,9 @@ Guomi.SM3.hash_hex("abc")
 Guomi.SM3.hash("abc")
 #=> <<102, 199, 240, 244, 98, 238, 221, 217, ...>>
 
-# 检查运行时支持
+# 检查运行时支持（始终为 true）
 Guomi.SM3.supported?()
-#=> true | false
+#=> true
 ```
 
 ### SM4 加密
@@ -102,9 +101,9 @@ iv = <<0::128>>
 {:ok, cipher} = Guomi.SM4.encrypt_cbc("Hello, Guomi!", key, iv)
 {:ok, back} = Guomi.SM4.decrypt_cbc(cipher, key, iv)
 
-# 检查运行时支持
+# 检查运行时支持（始终为 true）
 Guomi.SM4.supported?()
-#=> true | false
+#=> true
 ```
 
 ### SM2 签名和加密
@@ -113,28 +112,23 @@ Guomi.SM4.supported?()
 
 ```elixir
 # 生成密钥对
-case Guomi.SM2.generate_keypair() do
-  {:ok, private_key, public_key} ->
-    # 签名
-    {:ok, signature} = Guomi.SM2.sign("message", private_key)
+{:ok, private_key, public_key} = Guomi.SM2.generate_keypair()
 
-    # 验签
-    {:ok, valid?} = Guomi.SM2.verify("message", signature, public_key)
-    valid?
+# 签名
+{:ok, signature} = Guomi.SM2.sign("message", private_key)
 
-    # 加密
-    {:ok, ciphertext} = Guomi.SM2.encrypt("secret message", public_key)
+# 验签
+{:ok, valid?} = Guomi.SM2.verify("message", signature, public_key)
 
-    # 解密
-    {:ok, plaintext} = Guomi.SM2.decrypt(ciphertext, private_key)
+# 加密
+{:ok, ciphertext} = Guomi.SM2.encrypt("secret message", public_key)
 
-  {:error, :unsupported} ->
-    :runtime_not_supported
-end
+# 解密
+{:ok, plaintext} = Guomi.SM2.decrypt(ciphertext, private_key)
 
-# 检查运行时支持
+# 检查运行时支持（始终为 true）
 Guomi.SM2.supported?()
-#=> true | false
+#=> true
 ```
 
 ## CLI 工具
@@ -234,9 +228,14 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.5.0] - 2026-05-16
+- Pure Elixir SM2/SM3/SM4 implementations — no runtime OpenSSL dependency
+- All `supported?/0` now return `true` unconditionally
+- Expanded test coverage with block boundary and edge case tests
+
 #### [0.4.2] - 2026-05-16
 - Fixed Credo strict warnings in CLI, SM2, SM4, and OpenSSL compatibility tests
-- Normalized source line endings for Credo consistency checks
+- Normalized source file line endings for Credo consistency checks
 
 #### [0.4.1] - 2026-05-16
 - Made SM3/SM4 tests runtime-aware when CI OpenSSL lacks Guomi algorithms
@@ -259,6 +258,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0
@@ -281,42 +281,29 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ## 已知问题
 
-1. **SM2 运行时依赖** - 需要 OpenSSL 3.0+ 且编译时启用 SM2 曲线支持
-2. **Windows 兼容性** - 部分 OpenSSL 功能在 Windows 上可能受限
-3. **SM2 互操作性** - 当前 SM2 签名与加密 API 固定为本库支持的格式，未覆盖完整标准互通参数
-4. **SM2 加密性能** - 当前实现使用简化 KDF，长消息加密性能有待优化
+1. **SM2 互操作性** - 当前 SM2 签名与加密 API 固定为本库支持的格式，未覆盖完整标准互通参数
+2. **SM2 加密性能** - 纯 Elixir 曲线运算在计算密集型场景下性能低于 NIF 方案，长消息加密性能有待优化
 
 ## 安全注意事项
 
 - 不要在新设计中使用 ECB 模式保护敏感数据。
 - CBC 模式必须为每次加密使用新的 16 字节 IV，且同一 key 下不得复用 IV。
-- SM2 支持依赖运行时 OpenSSL 能力；部署前应检测 `supported?/0`。
 - 当前 SM2 加密格式用于 Guomi 内部往返，不应作为跨实现标准 SM2 密文格式。
 
 ## FAQ
 
-### Q: 为什么 `Guomi.SM2.supported?()` 返回 `false`？
+### Q: `Guomi.SM2.supported?()` 为什么永远返回 `true`？
 
-A: SM2 需要 OpenSSL 3.0+ 且在编译时启用了国密算法支持。请检查：
-
-```bash
-# 检查 OpenSSL 版本
-openssl version
-
-# 检查 Erlang 是否识别 SM2 曲线
-elixir -e "IO.inspect(:crypto.supports(:curves))"
-```
+A: 所有算法均为纯 Elixir 实现，不依赖运行时 OpenSSL 的国密算法支持。该函数在所有支持的 Erlang/OTP 版本上均返回 `true`。
 
 ### Q: 如何在生产环境使用？
 
 A: 确保部署环境满足：
 - Erlang/OTP 24+
-- OpenSSL 3.0+（推荐系统级安装）
-- 在运行时调用 `supported?/0` 检测可用性
 
 ### Q: 性能如何？
 
-A: 基于 OTP `:crypto` NIF 实现，性能接近原生 C 实现。参考基准（M1 Max, OTP 26）：
+A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI 使用。参考基准（M1 Max, OTP 26）：
 
 | 算法 | 操作 | 吞吐量 |
 |------|------|--------|
@@ -326,7 +313,7 @@ A: 基于 OTP `:crypto` NIF 实现，性能接近原生 C 实现。参考基准�
 | SM2 | sign | ~2000 ops/s |
 | SM2 | verify | ~1500 ops/s |
 
-> 实际性能取决于硬件和 OpenSSL 版本
+> 实际性能取决于硬件。对于需要极致性能的场景，纯 Erlang NIF 方案可能更优。
 
 ## Contributing
 
@@ -351,8 +338,7 @@ A: 基于 OTP `:crypto` NIF 实现，性能接近原生 C 实现。参考基准�
 
 ## 致谢
 
-- [Erlang/OTP](https://www.erlang.org/) - 基础加密能力
-- [OpenSSL](https://www.openssl.org/) - 国密算法实现
+- [Erlang/OTP](https://www.erlang.org/) - 基础加密能力与随机数生成
 
 ## 相关链接
 
@@ -362,17 +348,9 @@ A: 基于 OTP `:crypto` NIF 实现，性能接近原生 C 实现。参考基准�
 
 ## Roadmap
 
-### v0.2.0
+### v0.5.0+ 规划
 - [ ] 添加 SM4 CTR 模式
 - [ ] 增加性能基准测试
 - [ ] 优化 SM2 加密 KDF 实现
-
-### v0.3.0
-- [ ] 支持 SM9 算法（基于身份的加密）
-- [ ] 添加密钥派生函数 (KDF)
-- [ ] 支持硬件加密模块 (HSM)
-
-### 未来版本
-- [ ] SM1 算法支持（需硬件合作）
-- [ ] 国密 SSL/TLS 支持
+- [ ] SM9 算法支持（基于身份的加密）
 - [ ] 国密证书解析

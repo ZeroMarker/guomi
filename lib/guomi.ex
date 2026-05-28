@@ -14,8 +14,8 @@ defmodule Guomi do
   @doc """
   Returns runtime support for each algorithm.
 
-  Support depends on the Erlang/OTP `:crypto` module and the OpenSSL version
-  used to build the current runtime.
+  Since v0.5.0 all algorithms are implemented in pure Elixir and are
+  always supported at runtime.
   """
   @spec supported() :: %{algorithm() => boolean()}
   def supported do

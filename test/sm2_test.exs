@@ -275,5 +275,88 @@ defmodule Guomi.SM2Test do
           assert true
       end
     end
+
+    test "decrypt at exact 97-byte boundary" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, private_key, public_key} ->
+          # Empty plaintext → ciphertext = 65 (C1) + 0 (C2) + 32 (C3) = 97 bytes
+          {:ok, ct} = Guomi.SM2.encrypt("", public_key)
+          assert byte_size(ct) == 97
+          assert {:ok, decrypted} = Guomi.SM2.decrypt(ct, private_key)
+          assert decrypted == ""
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "decrypt rejects 96-byte ciphertext" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, _pub} ->
+          assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<0::96*8>>, priv)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+  end
+
+  describe "invalid inputs" do
+    test "sign with invalid private key size" do
+      short_key = <<0::31*8>>
+      assert {:error, :unsupported} = Guomi.SM2.sign("test", short_key)
+
+      long_key = <<0::33*8>>
+      assert {:error, :unsupported} = Guomi.SM2.sign("test", long_key)
+
+      assert {:error, :unsupported} = Guomi.SM2.sign("test", <<>>)
+    end
+
+    test "verify with invalid signature sizes" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, pub} ->
+          {:ok, sig} = Guomi.SM2.sign("test", priv)
+
+          assert {:ok, false} = Guomi.SM2.verify("test", <<>>, pub)
+
+          <<r::32-binary, _s::32-binary>> = sig
+          assert {:ok, false} = Guomi.SM2.verify("test", r, pub)
+
+          assert {:ok, false} = Guomi.SM2.verify("test", sig <> sig, pub)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "verify with invalid public key sizes raises" do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, _pub} ->
+          {:ok, sig} = Guomi.SM2.sign("test", priv)
+
+          short_pub = <<0::64*8>>
+          assert {:error, :unsupported} = Guomi.SM2.verify("test", sig, short_pub)
+
+          assert {:error, :unsupported} = Guomi.SM2.verify("test", sig, <<>>)
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+
+    test "encrypt with invalid public key" do
+      # Too short
+      assert {:error, :decryption_failed} = Guomi.SM2.encrypt("test", <<0::64*8>>)
+
+      # Empty
+      assert {:error, :decryption_failed} = Guomi.SM2.encrypt("test", <<>>)
+    end
+
+    test "decrypt with invalid private key size" do
+      ct = <<0::97*8>>
+      assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ct, <<0::31*8>>)
+      assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ct, <<0::33*8>>)
+      assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<0::96*8>>, <<0::256>>)
+    end
   end
 end

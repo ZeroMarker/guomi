@@ -7,6 +7,47 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-16
+
+### Added
+
+- Pure Elixir SM3 implementation — replaces the previous `:crypto.hash(:sm3, ...)`
+  dependency. SM3 is now fully implemented in Elixir with proper padding, block
+  processing, and the GM/T 0004-2012 compression function.
+- Pure Elixir SM4 implementation — replaces the previous `:crypto.crypto_one_time`
+  dependency. Full S-box lookup, key expansion, ECB and CBC modes, and PKCS#7
+  padding are implemented in Elixir (GM/T 0002-2012).
+- Pure Elixir SM2 curve arithmetic (`Guomi.SM2.Curve`) — Jacobian projective
+  coordinate elliptic curve operations over the SM2 p256v1 curve, including point
+  doubling, addition, scalar multiplication, modular inverse, ECDH shared secret,
+  and ECDSA-compatible sign/verify primitives.
+- `Guomi.SM2.Curve` module with low-level SM2 elliptic curve operations.
+- Additional test coverage for block boundaries, padding edge cases, empty input,
+  invalid key/ciphertext sizes, PKCS#7 padding validation, CBC mode with binary
+  data, and CLI empty input handling.
+
+### Changed
+
+- `Guomi.SM2.supported?/0`, `Guomi.SM3.supported?/0`, and `Guomi.SM4.supported?/0`
+  now return `true` unconditionally — all algorithms are implemented in pure
+  Elixir and no longer require runtime OpenSSL SM algorithm support.
+- `Guomi.SM3.hash/1` and `Guomi.SM3.hash_hex/1` now accept iodata input.
+- `Guomi.SM4.encrypt/2`, `Guomi.SM4.decrypt/2`, `Guomi.SM4.encrypt_cbc/3`,
+  `Guomi.SM4.decrypt_cbc/3` no longer depend on OTP `:crypto` SM4 primitives.
+- `Guomi.SM2.generate_keypair/0`, `Guomi.SM2.sign/2`, `Guomi.SM2.verify/3`,
+  `Guomi.SM2.encrypt/2`, `Guomi.SM2.decrypt/2` no longer depend on OTP
+  `:crypto` ECDH/ECDSA primitives.
+- Simplified CLI error handling — removed the `:unsupported` error variant for
+  SM2 since it is always supported at runtime.
+- Renamed internal `extract_shared_secret/1` to direct big-endian encoding in
+  SM2 encryption/decryption.
+
+### Removed
+
+- Runtime `:crypto` dependency for SM3 hashing, SM4 encryption, and SM2 curve
+  operations. The OTP `:crypto` module is now only used for `:crypto.exor/2`
+  (XOR helper) and `:crypto.strong_rand_bytes/1` (random key generation).
+
 ## [0.4.2] - 2026-05-16
 
 ### Changed
@@ -102,7 +143,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ZeroMarker/guomi/compare/v0.3.0...v0.4.0

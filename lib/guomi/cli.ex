@@ -377,7 +377,6 @@ defmodule Guomi.CLI do
   defp format_sm4_error({:invalid_mode, mode}), do: "Invalid mode: #{mode} (use 'ecb' or 'cbc')"
   defp format_sm4_error(_), do: "Unknown error"
 
-  defp format_sm2_error(:unsupported), do: "SM2 is not supported on this system"
   defp format_sm2_error(:decryption_failed), do: "Decryption failed"
   defp format_sm2_error(:invalid_ciphertext), do: "Invalid ciphertext"
   defp format_sm2_error(_), do: "Unknown error"

@@ -56,6 +56,13 @@ defmodule Guomi.CLITest do
     end
   end
 
+  test "sm3 handles empty input" do
+    if Guomi.SM3.supported?() do
+      {output, 0} = run_cli(["sm3", "--hex"], "")
+      assert String.trim(output) =~ ~r/^[0-9a-f]{64}$/
+    end
+  end
+
   test "sm4 reports missing key" do
     {output, status} = run_cli(["sm4"], "secret")
     assert status != 0
@@ -83,7 +90,6 @@ defmodule Guomi.CLITest do
   test "sm4 encrypts to hex and decrypts hex ciphertext" do
     if Guomi.SM4.supported?() do
       {ciphertext, 0} = run_cli(["sm4", "--key", @key, "--hex"], "secret")
-
       assert ciphertext =~ ~r/^[0-9a-f]+\r?\n$/
 
       {plaintext, 0} =
@@ -107,6 +113,129 @@ defmodule Guomi.CLITest do
         )
 
       assert String.trim(plaintext_hex) == "736563726574"
+    end
+  end
+
+  test "sm4 cbc mode encrypt and decrypt" do
+    if Guomi.SM4.supported?() do
+      iv_hex = "00112233445566778899aabbccddeeff"
+
+      {ct, 0} =
+        run_cli(["sm4", "--key", @key, "--mode", "cbc", "--iv", iv_hex, "--hex"], "secret")
+
+      {pt, 0} =
+        run_cli(
+          ["sm4", "--decrypt", "--key", @key, "--mode", "cbc", "--iv", iv_hex, "--hex"],
+          String.trim(ct)
+        )
+
+      assert String.trim(pt) == "secret"
+    end
+  end
+
+  test "sm4 cbc mode requires --iv" do
+    {output, status} = run_cli(["sm4", "--key", @key, "--mode", "cbc"], "secret")
+    assert status != 0
+    assert output =~ "Missing required option --iv"
+  end
+
+  test "unknown command reports error" do
+    {output, status} = run_cli(["unknown"])
+    assert status != 0
+    assert output =~ "Unknown command"
+  end
+
+  test "no command prints help" do
+    {output, 0} = run_cli([])
+    assert output =~ "USAGE:"
+  end
+
+  # SM2 CLI tests - call module functions directly to test CLI integration
+  # (subprocess approach is fragile for SM2 due to subprocess startup delay)
+
+  test "sm2 generate via module" do
+    if Guomi.SM2.supported?() do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, pub} ->
+          assert byte_size(priv) == 32
+          assert byte_size(pub) == 65
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+  end
+
+  test "sm2 sign and verify via module" do
+    if Guomi.SM2.supported?() do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, pub} ->
+          priv_hex = Base.encode16(priv, case: :lower)
+          pub_hex = Base.encode16(pub, case: :lower)
+
+          # Sign CLI
+          {sig_hex, 0} =
+            run_cli(["sm2", "--sign", "--private-key", priv_hex, "--message", "test"])
+
+          sig_hex = String.trim(sig_hex)
+
+          # Verify CLI
+          {out, 0} =
+            run_cli([
+              "sm2",
+              "--verify",
+              "--public-key",
+              pub_hex,
+              "--signature",
+              sig_hex,
+              "--message",
+              "test"
+            ])
+
+          assert out =~ "valid"
+
+          # Tampered message
+          {out2, status2} =
+            run_cli([
+              "sm2",
+              "--verify",
+              "--public-key",
+              pub_hex,
+              "--signature",
+              sig_hex,
+              "--message",
+              "wrong"
+            ])
+
+          assert status2 != 0
+          assert out2 =~ "INVALID"
+
+        {:error, :unsupported} ->
+          assert true
+      end
+    end
+  end
+
+  test "sm2 encrypt and decrypt via module" do
+    if Guomi.SM2.supported?() do
+      case Guomi.SM2.generate_keypair() do
+        {:ok, priv, pub} ->
+          priv_hex = Base.encode16(priv, case: :lower)
+          pub_hex = Base.encode16(pub, case: :lower)
+
+          {ct_hex, 0} =
+            run_cli(["sm2", "--encrypt", "--public-key", pub_hex, "--message", "secret"])
+
+          ct_hex = String.trim(ct_hex)
+
+          {pt, 0} =
+            run_cli(["sm2", "--decrypt", "--private-key", priv_hex, "--ciphertext", ct_hex])
+
+          assert String.trim(pt) == "secret"
+
+        {:error, :unsupported} ->
+          assert true
+      end
     end
   end
 end

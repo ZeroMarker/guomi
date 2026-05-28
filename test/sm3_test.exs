@@ -64,6 +64,44 @@ defmodule Guomi.SM3Test do
     end
   end
 
+  test "handles iodata input" do
+    with_sm3_supported(fn ->
+      iodata = ["hello", " ", "world"]
+      bin = "hello world"
+      assert Guomi.SM3.hash(iodata) == Guomi.SM3.hash(bin)
+      assert Guomi.SM3.hash_hex(iodata) == Guomi.SM3.hash_hex(bin)
+    end)
+  end
+
+  test "hash and hash_hex are consistent" do
+    with_sm3_supported(fn ->
+      data = "test consistency"
+      assert Base.decode16!(Guomi.SM3.hash_hex(data), case: :lower) == Guomi.SM3.hash(data)
+    end)
+  end
+
+  # Block boundary tests: SM3 block size = 64 bytes
+  # Input sizes: 55 (max single-block w/o extra padding block),
+  #              56 (min 2-block), 63, 64 (exact 1 block), 65, 128 (exact 2), 129
+  for len <- [55, 56, 63, 64, 65, 128, 129] do
+    @input String.duplicate("a", len)
+    test "handles input of exactly #{len} bytes (block boundary)" do
+      with_sm3_supported(fn ->
+        assert byte_size(Guomi.SM3.hash(@input)) == 32
+        assert byte_size(Guomi.SM3.hash_hex(@input)) == 64
+      end)
+    end
+  end
+
+  # Known answer test for empty string
+  test "empty string hash matches known vector" do
+    with_sm3_supported(fn ->
+      # SM3("") empty string hash
+      expected = "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b"
+      assert Guomi.SM3.hash_hex("") == expected
+    end)
+  end
+
   describe "hash_hex/1" do
     test "returns lowercase hex string" do
       with_sm3_supported(fn ->
