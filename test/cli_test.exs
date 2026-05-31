@@ -154,88 +154,65 @@ defmodule Guomi.CLITest do
   # (subprocess approach is fragile for SM2 due to subprocess startup delay)
 
   test "sm2 generate via module" do
-    if Guomi.SM2.supported?() do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, pub} ->
-          assert byte_size(priv) == 32
-          assert byte_size(pub) == 65
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
+    assert Guomi.SM2.supported?()
+    assert {:ok, priv, pub} = Guomi.SM2.generate_keypair()
+    assert byte_size(priv) == 32
+    assert byte_size(pub) == 65
   end
 
   test "sm2 sign and verify via module" do
-    if Guomi.SM2.supported?() do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, pub} ->
-          priv_hex = Base.encode16(priv, case: :lower)
-          pub_hex = Base.encode16(pub, case: :lower)
+    assert {:ok, priv, pub} = Guomi.SM2.generate_keypair()
+    priv_hex = Base.encode16(priv, case: :lower)
+    pub_hex = Base.encode16(pub, case: :lower)
 
-          # Sign CLI
-          {sig_hex, 0} =
-            run_cli(["sm2", "--sign", "--private-key", priv_hex, "--message", "test"])
+    {sig_hex, 0} =
+      run_cli(["sm2", "--sign", "--private-key", priv_hex, "--message", "test"])
 
-          sig_hex = String.trim(sig_hex)
+    sig_hex = String.trim(sig_hex)
 
-          # Verify CLI
-          {out, 0} =
-            run_cli([
-              "sm2",
-              "--verify",
-              "--public-key",
-              pub_hex,
-              "--signature",
-              sig_hex,
-              "--message",
-              "test"
-            ])
+    {out, 0} =
+      run_cli([
+        "sm2",
+        "--verify",
+        "--public-key",
+        pub_hex,
+        "--signature",
+        sig_hex,
+        "--message",
+        "test"
+      ])
 
-          assert out =~ "valid"
+    assert out =~ "valid"
 
-          # Tampered message
-          {out2, status2} =
-            run_cli([
-              "sm2",
-              "--verify",
-              "--public-key",
-              pub_hex,
-              "--signature",
-              sig_hex,
-              "--message",
-              "wrong"
-            ])
+    {out2, status2} =
+      run_cli([
+        "sm2",
+        "--verify",
+        "--public-key",
+        pub_hex,
+        "--signature",
+        sig_hex,
+        "--message",
+        "wrong"
+      ])
 
-          assert status2 != 0
-          assert out2 =~ "INVALID"
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
+    assert status2 != 0
+    assert out2 =~ "INVALID"
   end
 
   test "sm2 encrypt and decrypt via module" do
-    if Guomi.SM2.supported?() do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, pub} ->
-          priv_hex = Base.encode16(priv, case: :lower)
-          pub_hex = Base.encode16(pub, case: :lower)
+    assert {:ok, priv, pub} = Guomi.SM2.generate_keypair()
+    priv_hex = Base.encode16(priv, case: :lower)
+    pub_hex = Base.encode16(pub, case: :lower)
 
-          {ct_hex, 0} =
-            run_cli(["sm2", "--encrypt", "--public-key", pub_hex, "--message", "secret"])
+    {ct_hex, 0} =
+      run_cli(["sm2", "--encrypt", "--public-key", pub_hex, "--message", "secret"])
 
-          ct_hex = String.trim(ct_hex)
+    ct_hex = String.trim(ct_hex)
 
-          {pt, 0} =
-            run_cli(["sm2", "--decrypt", "--private-key", priv_hex, "--ciphertext", ct_hex])
+    {pt, 0} =
+      run_cli(["sm2", "--decrypt", "--private-key", priv_hex, "--ciphertext", ct_hex])
 
-          assert String.trim(pt) == "secret"
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
+    assert String.trim(pt) == "secret"
   end
 end

@@ -33,9 +33,26 @@
 
 ## P2: Crypto Hardening
 
-- [ ] Narrow broad `rescue` clauses in crypto modules.
+- [x] Narrow broad `rescue` clauses in crypto modules.
   - Avoid mapping unrelated implementation bugs to `{:error, :unsupported}`.
-  - Acceptance: unsupported runtime crypto capability is handled intentionally, while unexpected failures remain visible during tests.
+  - Focus first on `Guomi.SM2`, where `generate_keypair/0`, `sign/2`, `verify/3`, `encrypt/2`, and `decrypt/2` currently rescue all exceptions.
+  - Replace broad fallback behavior with explicit validation and clear error reasons such as `:invalid_key`, `:invalid_signature`, `:invalid_ciphertext`, and `:decryption_failed`.
+  - Keep `:unsupported` only for genuine runtime capability gaps. Since the current implementation is pure Elixir and `supported?/0` returns `true`, normal invalid input should not be reported as unsupported.
+  - Acceptance: malformed SM2 private keys, public keys, signatures, and ciphertexts return deterministic domain errors; unexpected implementation failures still fail loudly in tests.
+
+- [x] Align SM2 tests with the pure-Elixir support model.
+  - Remove legacy branches that accept `{:error, :unsupported}` for ordinary SM2 operations.
+  - Update invalid-input assertions to match the explicit error reasons introduced by the narrowed error handling.
+  - Add regression coverage proving encryption failures are not reported as `:decryption_failed` unless decryption actually fails authentication or ciphertext validation.
+  - Acceptance: SM2 tests document always-supported behavior on supported Erlang/OTP versions and no longer mask invalid input as runtime unsupported.
+
+- [x] Fix SM2 signing/verification timeout after explicit error handling.
+  - Initial status: `mix format`, `mix compile --warnings-as-errors`, `git diff --check`, and isolated SM2 keypair tests passed.
+  - Initial blocker: `mix test test/sm2_test.exs:27 --trace` timed out in the SM2 sign/verify roundtrip path.
+  - The old broad rescue paths masked curve arithmetic failures; keypair generation was fixed enough to pass, but signing still needs diagnosis.
+  - Investigate `Guomi.SM2.Curve.sign/2`, `sign_with_e/2`, affine scalar multiplication, modular inverse over the curve order, and verify point addition.
+  - Resolution: modular inverse now accepts an explicit modulus and SM2 signature scalar arithmetic uses the curve order `n`; regression coverage verifies `mod_inv(2, n)`.
+  - Acceptance: `mix test test/sm2_test.exs --trace` and full `mix test` complete without timeout or failures.
 
 - [x] Harden PKCS#7 padding validation.
   - Current validation can return based on padding content differences.
@@ -46,9 +63,16 @@
   - SM2 的椭圆曲线运算（ECDH、ECDSA）使用纯 Elixir 的有限域算术实现点加、倍点、标量乘、模逆。
   - Acceptance: 所有 68 个测试通过，包括官方 KAT 向量和 OpenSSL 兼容性验证。
 
-- [ ] Consider adding SM4 CTR/GCM-like streaming-friendly APIs if supported by runtime crypto.
-  - Keep ECB/CBC APIs for compatibility, but document safe usage recommendations.
-  - Acceptance: README warns about ECB mode and IV reuse risks for CBC.
+- [x] Consider adding SM4 CTR APIs for streaming-friendly encryption.
+  - Add `encrypt_ctr/4` and `decrypt_ctr/4` only if the API can be specified clearly with a 16-byte nonce/counter block and deterministic counter increment semantics.
+  - Do not describe this as GCM-like unless authentication is actually implemented; unauthenticated CTR must be documented as confidentiality-only.
+  - Keep ECB/CBC APIs for compatibility, but recommend against ECB for new encryption and warn that CTR nonce reuse is catastrophic.
+  - Acceptance: CTR has round-trip tests, counter-boundary tests, known-vector coverage if available, README security notes, and CLI behavior only if the command-line UX is unambiguous.
+
+- [x] Decide whether `cli.md` is release documentation.
+  - The file currently exists outside the tracked set. If it is intended as public documentation, include it in `mix.exs` docs extras and package files.
+  - If README remains the canonical CLI reference, either remove duplication or keep `cli.md` explicitly scoped as a local development note.
+  - Acceptance: package/docs output includes every intended public document and excludes stale duplicate guidance.
 
 ## P3: CI and Release Quality
 

@@ -12,79 +12,62 @@ defmodule Guomi.SM2 do
 
   alias Guomi.SM2.Curve
 
-  @type error_reason :: :unsupported | :invalid_key | :decryption_failed | :invalid_ciphertext
+  @type error_reason ::
+          :invalid_key
+          | :invalid_signature
+          | :invalid_ciphertext
+          | :decryption_failed
 
   @spec supported?() :: boolean()
   def supported?, do: true
 
   # -- Key generation ----------------------------------------------------------
 
-  @spec generate_keypair :: {:ok, binary(), binary()} | {:error, :unsupported}
+  @spec generate_keypair :: {:ok, binary(), binary()}
   def generate_keypair do
     {priv, {_gx, _gy} = pub} = Curve.generate_keypair()
-    priv_bin = <<priv::32-big>>
+    priv_bin = <<priv::256-big>>
     pub_bin = Curve.encode_public(pub)
     {:ok, priv_bin, pub_bin}
-  rescue
-    _ -> {:error, :unsupported}
   end
 
   # -- Signature ---------------------------------------------------------------
 
   @spec sign(binary() | iodata(), binary()) :: {:ok, binary()} | {:error, error_reason()}
   def sign(message, private_key) when is_binary(private_key) do
-    data = IO.iodata_to_binary(message)
-    digest = Guomi.SM3.hash(data)
-    priv_int = Curve.private_key_to_int(private_key)
-
-    Curve.sign(digest, priv_int)
-  rescue
-    _ -> {:error, :unsupported}
+    with {:ok, priv_int} <- decode_private_key(private_key),
+         {:ok, data} <- to_binary(message) do
+      digest = Guomi.SM3.hash(data)
+      Curve.sign(digest, priv_int)
+    end
   end
 
   @spec verify(binary() | iodata(), binary(), binary()) ::
           {:ok, boolean()} | {:error, error_reason()}
   def verify(message, signature, public_key)
       when is_binary(signature) and is_binary(public_key) do
-    data = IO.iodata_to_binary(message)
-    digest = Guomi.SM3.hash(data)
-    pub_point = Curve.decode_public(public_key)
-
-    {:ok, Curve.verify(digest, signature, pub_point)}
-  rescue
-    _ -> {:error, :unsupported}
+    with {:ok, pub_point} <- decode_public_key(public_key),
+         :ok <- validate_signature(signature),
+         {:ok, data} <- to_binary(message) do
+      digest = Guomi.SM3.hash(data)
+      {:ok, Curve.verify(digest, signature, pub_point)}
+    end
   end
 
   # -- Encryption (ECDH + SM3 KDF + XOR + SM3 MAC) ----------------------------
 
   @spec encrypt(binary() | iodata(), binary()) :: {:ok, binary()} | {:error, error_reason()}
   def encrypt(plaintext, public_key) do
-    data = IO.iodata_to_binary(plaintext)
-    pub_point = Curve.decode_public(public_key)
-
-    # Generate ephemeral key pair
-    {ephemeral_priv, ephemeral_pub} = Curve.generate_keypair()
-
-    # Compute shared secret
-    {:ok, shared_x} = Curve.shared_secret(ephemeral_priv, pub_point)
-
-    # Derive encryption and MAC keys using SM3 KDF
-    shared = <<shared_x::32-big>>
-    {key_enc, key_mac} = derive_keys(shared)
-
-    # Encrypt data using XOR with keystream
-    encrypted = xor_with_keystream(data, key_enc)
-
-    # Compute MAC: SM3(key_mac || encrypted_data)
-    mac = Guomi.SM3.hash(key_mac <> encrypted)
-
-    # Ciphertext: C1 (ephemeral pubkey) || C2 (encrypted data) || C3 (MAC)
-    ephemeral_pub_bin = Curve.encode_public(ephemeral_pub)
-    ciphertext = ephemeral_pub_bin <> encrypted <> mac
-
-    {:ok, ciphertext}
-  rescue
-    _ -> {:error, :decryption_failed}
+    with {:ok, data} <- to_binary(plaintext),
+         {:ok, pub_point} <- decode_public_key(public_key),
+         {ephemeral_priv, ephemeral_pub} <- Curve.generate_keypair(),
+         {:ok, shared_x} <- Curve.shared_secret(ephemeral_priv, pub_point) do
+      shared = <<shared_x::256-big>>
+      {key_enc, key_mac} = derive_keys(shared)
+      encrypted = xor_with_keystream(data, key_enc)
+      mac = Guomi.SM3.hash(key_mac <> encrypted)
+      {:ok, Curve.encode_public(ephemeral_pub) <> encrypted <> mac}
+    end
   end
 
   @spec decrypt(binary(), binary()) :: {:ok, binary()} | {:error, error_reason()}
@@ -93,27 +76,73 @@ defmodule Guomi.SM2 do
   end
 
   def decrypt(ciphertext, private_key) do
-    # Ciphertext: C1 (65-byte ephemeral public key) || C2 || C3 (32-byte MAC)
-    <<ephemeral_pub_bin::binary-size(65), encrypted_data::binary-size(byte_size(ciphertext) - 97),
-      mac::binary-size(32)>> =
-      ciphertext
+    with {:ok, priv_int} <- decode_private_key(private_key),
+         {:ok, ephemeral_pub_bin, encrypted_data, mac} <- split_ciphertext(ciphertext),
+         {:ok, pub_point} <- decode_public_key(ephemeral_pub_bin),
+         {:ok, shared_x} <- Curve.shared_secret(priv_int, pub_point) do
+      shared = <<shared_x::256-big>>
+      {key_enc, key_mac} = derive_keys(shared)
+      expected_mac = Guomi.SM3.hash(key_mac <> encrypted_data)
 
-    pub_point = Curve.decode_public(ephemeral_pub_bin)
-    priv_int = Curve.private_key_to_int(private_key)
-
-    {:ok, shared_x} = Curve.shared_secret(priv_int, pub_point)
-    shared = <<shared_x::32-big>>
-
-    {key_enc, key_mac} = derive_keys(shared)
-    expected_mac = Guomi.SM3.hash(key_mac <> encrypted_data)
-
-    if secure_compare(mac, expected_mac) do
-      {:ok, xor_with_keystream(encrypted_data, key_enc)}
-    else
-      {:error, :decryption_failed}
+      if secure_compare(mac, expected_mac) do
+        {:ok, xor_with_keystream(encrypted_data, key_enc)}
+      else
+        {:error, :decryption_failed}
+      end
     end
+  end
+
+  defp to_binary(data) do
+    {:ok, IO.iodata_to_binary(data)}
   rescue
-    _ -> {:error, :decryption_failed}
+    ArgumentError -> {:error, :invalid_key}
+  end
+
+  defp decode_private_key(<<key::256-big>>) do
+    if key > 0 and key < Curve.n(), do: {:ok, key}, else: {:error, :invalid_key}
+  end
+
+  defp decode_private_key(_), do: {:error, :invalid_key}
+
+  defp decode_public_key(<<0x04, x_bin::binary-size(32), y_bin::binary-size(32)>>) do
+    point = {:binary.decode_unsigned(x_bin, :big), :binary.decode_unsigned(y_bin, :big)}
+
+    if valid_public_point?(point) do
+      {:ok, point}
+    else
+      {:error, :invalid_key}
+    end
+  end
+
+  defp decode_public_key(_), do: {:error, :invalid_key}
+
+  defp valid_public_point?({x, y}) do
+    x in 0..(Curve.p() - 1) and y in 0..(Curve.p() - 1) and
+      mod(y * y, Curve.p()) ==
+        mod(x * x * x + Curve.a() * x + Curve.b(), Curve.p())
+  end
+
+  defp validate_signature(<<r::256-big, s::256-big>>) do
+    if r > 0 and r < Curve.n() and s > 0 and s < Curve.n(),
+      do: :ok,
+      else: {:error, :invalid_signature}
+  end
+
+  defp validate_signature(_), do: {:error, :invalid_signature}
+
+  defp split_ciphertext(<<c1::binary-size(65), rest::binary>>) when byte_size(rest) >= 32 do
+    c2_size = byte_size(rest) - 32
+    <<c2::binary-size(c2_size), c3::binary-size(32)>> = rest
+    {:ok, c1, c2, c3}
+  end
+
+  defp split_ciphertext(_), do: {:error, :invalid_ciphertext}
+
+  defp mod(value, modulus) do
+    value
+    |> rem(modulus)
+    |> Kernel.+(modulus)
+    |> rem(modulus)
   end
 
   # -- KDF: Derive encryption and MAC keys from shared secret -----------------

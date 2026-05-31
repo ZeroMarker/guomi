@@ -7,6 +7,35 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-31
+
+### Added
+
+- Added SM4 CTR mode with `encrypt_ctr/4` and `decrypt_ctr/4`, using a 16-byte
+  big-endian counter block and supporting arbitrary-length input without padding.
+- Added CTR coverage for round trips, the first-block SM4 test vector,
+  counter increment behavior, counter wraparound, and invalid key/counter sizes.
+- Added `cli.md` to published package files and ExDoc extras.
+
+### Changed
+
+- Tightened SM2 error handling so invalid keys, signatures, and ciphertexts
+  return deterministic domain errors instead of broad `:unsupported` fallbacks.
+- Updated SM2 tests and CLI integration coverage to reflect the pure-Elixir
+  always-supported runtime model.
+- Updated README support tables, SM4 examples, and security notes for CTR mode.
+
+### Fixed
+
+- Fixed SM2 public key, private key, and raw signature encoding to use fixed
+  256-bit big-endian integer fields.
+- Fixed SM2 modular inverse so signature scalar arithmetic can use the curve
+  order `n` instead of only the field prime `p`.
+- Fixed SM2 signing timeout caused by `s == 0` retry loops when modular inverse
+  over `n` returned `0`.
+- Fixed affine point arithmetic edge cases that were previously hidden by broad
+  rescue clauses.
+
 ## [0.5.0] - 2026-05-16
 
 ### Added
@@ -143,7 +172,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1

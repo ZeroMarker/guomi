@@ -191,6 +191,51 @@ defmodule Guomi.SM4Test do
     end
   end
 
+  describe "CTR mode" do
+    test "encrypt/decrypt roundtrip for arbitrary length plaintext" do
+      counter = <<0::128>>
+      plaintext = "stream-friendly plaintext that is not block aligned"
+
+      assert {:ok, ciphertext} = Guomi.SM4.encrypt_ctr(plaintext, @key, counter)
+      refute ciphertext == plaintext
+      assert {:ok, ^plaintext} = Guomi.SM4.decrypt_ctr(ciphertext, @key, counter)
+    end
+
+    test "matches SM4 block test vector for zero plaintext first keystream block" do
+      counter = @plain
+      expected = Base.decode16!("681EDF34D206965E86B3E94F536E4246")
+
+      assert {:ok, ^expected} = Guomi.SM4.encrypt_ctr(<<0::128>>, @key, counter)
+    end
+
+    test "increments counter as a big-endian 128-bit integer" do
+      counter = <<0::127, 1::1>>
+      plaintext = <<0::256>>
+
+      assert {:ok, ciphertext} = Guomi.SM4.encrypt_ctr(plaintext, @key, counter)
+      <<first::binary-size(16), second::binary-size(16)>> = ciphertext
+
+      assert {:ok, ^first} = Guomi.SM4.encrypt_ctr(<<0::128>>, @key, <<1::128-big>>)
+      assert {:ok, ^second} = Guomi.SM4.encrypt_ctr(<<0::128>>, @key, <<2::128-big>>)
+    end
+
+    test "wraps counter modulo 2^128" do
+      counter = <<0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF::128-big>>
+      plaintext = <<0::256>>
+
+      assert {:ok, ciphertext} = Guomi.SM4.encrypt_ctr(plaintext, @key, counter)
+      <<first::binary-size(16), second::binary-size(16)>> = ciphertext
+
+      assert {:ok, ^first} = Guomi.SM4.encrypt_ctr(<<0::128>>, @key, counter)
+      assert {:ok, ^second} = Guomi.SM4.encrypt_ctr(<<0::128>>, @key, <<0::128>>)
+    end
+
+    test "rejects invalid key and counter sizes" do
+      assert {:error, :invalid_key_size} = Guomi.SM4.encrypt_ctr("test", <<0::120>>, <<0::128>>)
+      assert {:error, :invalid_iv_size} = Guomi.SM4.encrypt_ctr("test", @key, <<0::120>>)
+    end
+  end
+
   describe "padding edge cases" do
     for len <- [0, 1, 15, 16, 17, 31, 32] do
       @plaintext String.duplicate("x", len)

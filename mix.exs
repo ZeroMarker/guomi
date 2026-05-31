@@ -1,7 +1,7 @@
 defmodule Guomi.MixProject do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.5.1"
 
   def project do
     [
@@ -37,14 +37,14 @@ defmodule Guomi.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/ZeroMarker/guomi"},
-      files: ~w(lib .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
+      files: ~w(lib .formatter.exs mix.exs README.md cli.md CHANGELOG.md LICENSE)
     ]
   end
 
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "LICENSE", "CHANGELOG.md"],
+      extras: ["README.md", "cli.md", "LICENSE", "CHANGELOG.md"],
       source_ref: "v#{@version}"
     ]
   end

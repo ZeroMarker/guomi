@@ -366,6 +366,24 @@ defmodule Guomi.SM4 do
     end
   end
 
+  @spec encrypt_ctr(binary(), binary(), binary(), keyword()) ::
+          {:ok, binary()} | {:error, error_reason()}
+  def encrypt_ctr(plaintext, key, counter, opts \\ [])
+      when is_binary(plaintext) and is_binary(key) and is_binary(counter) do
+    with :ok <- validate_key(key),
+         :ok <- validate_iv(counter),
+         :ok <- validate_ctr_opts(opts) do
+      {:ok, ctr_crypt(plaintext, key, counter)}
+    end
+  end
+
+  @spec decrypt_ctr(binary(), binary(), binary(), keyword()) ::
+          {:ok, binary()} | {:error, error_reason()}
+  def decrypt_ctr(ciphertext, key, counter, opts \\ [])
+      when is_binary(ciphertext) and is_binary(key) and is_binary(counter) do
+    encrypt_ctr(ciphertext, key, counter, opts)
+  end
+
   # -- ECB mode ----------------------------------------------------------------
 
   defp ecb_encrypt(data, key) do
@@ -405,6 +423,35 @@ defmodule Guomi.SM4 do
       end
 
     pt
+  end
+
+  # -- CTR mode ----------------------------------------------------------------
+
+  defp ctr_crypt(data, key, counter) do
+    rk = expand_key(key)
+    do_ctr_crypt(data, counter, rk, <<>>)
+  end
+
+  defp do_ctr_crypt(<<>>, _counter, _rk, acc), do: acc
+
+  defp do_ctr_crypt(data, counter, rk, acc) when byte_size(data) < @block_size do
+    size = byte_size(data)
+    keystream = crypt_block(counter, rk)
+    <<mask::binary-size(size), _::binary>> = keystream
+    acc <> xor_bytes(data, mask)
+  end
+
+  defp do_ctr_crypt(<<block::binary-size(@block_size), rest::binary>>, counter, rk, acc) do
+    do_ctr_crypt(
+      rest,
+      increment_counter(counter),
+      rk,
+      acc <> xor_bytes(block, crypt_block(counter, rk))
+    )
+  end
+
+  defp increment_counter(<<counter::128-big>>) do
+    <<rem(counter + 1, 1 <<< 128)::128-big>>
   end
 
   defp xor_bytes(a, b), do: :crypto.exor(a, b)
@@ -482,6 +529,9 @@ defmodule Guomi.SM4 do
 
   defp validate_block(data) when rem(byte_size(data), @block_size) == 0, do: :ok
   defp validate_block(_), do: {:error, :invalid_block_size}
+
+  defp validate_ctr_opts([]), do: :ok
+  defp validate_ctr_opts(_), do: {:error, :invalid_padding}
 
   # -- PKCS#7 padding ----------------------------------------------------------
 

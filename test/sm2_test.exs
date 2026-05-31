@@ -1,362 +1,205 @@
 defmodule Guomi.SM2Test do
   use ExUnit.Case, async: true
 
+  alias Guomi.SM2, as: SM2
+  alias Guomi.SM2.Curve, as: Curve
+
   describe "supported?/0" do
-    test "returns boolean" do
-      assert is_boolean(Guomi.SM2.supported?())
+    test "is always true for the pure Elixir implementation" do
+      assert SM2.supported?()
     end
   end
 
   describe "generate_keypair/0" do
-    test "generates valid keypair when supported" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          assert byte_size(private_key) == 32
-          assert byte_size(public_key) == 65
-          assert :binary.first(public_key) == 0x04
-
-        {:error, :unsupported} ->
-          assert true
-      end
+    test "generates valid keypair" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      assert byte_size(private_key) == 32
+      assert byte_size(public_key) == 65
+      assert :binary.first(public_key) == 0x04
     end
 
     test "generates different keypairs" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv1, pub1} ->
-          {:ok, priv2, pub2} = Guomi.SM2.generate_keypair()
-          refute priv1 == priv2
-          refute pub1 == pub2
+      assert {:ok, priv1, pub1} = SM2.generate_keypair()
+      assert {:ok, priv2, pub2} = SM2.generate_keypair()
+      refute priv1 == priv2
+      refute pub1 == pub2
+    end
+  end
 
-        {:error, :unsupported} ->
-          assert true
-      end
+  describe "curve arithmetic" do
+    test "computes modular inverse over the curve order" do
+      order = Curve.n()
+      inverse = Curve.mod_inv(2, order)
+
+      assert inverse != 0
+      assert rem(2 * inverse, order) == 1
     end
   end
 
   describe "sign/2 and verify/3" do
-    test "sign verify roundtrip when supported" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = "guomi-sm2"
-          assert {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
+    test "sign verify roundtrip" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      message = "guomi-sm2"
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:ok, signature} = SM2.sign(message, private_key)
+      assert {:ok, true} = SM2.verify(message, signature, public_key)
     end
 
     test "verify returns false for tampered message" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = "original message"
-          {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          tampered = "tampered message"
-          assert {:ok, false} = Guomi.SM2.verify(tampered, signature, public_key)
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      {:ok, signature} = SM2.sign("original message", private_key)
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:ok, false} = SM2.verify("tampered message", signature, public_key)
     end
 
     test "verify returns false for wrong public key" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, _private_key, _public_key} ->
-          {:ok, _priv2, pub2} = Guomi.SM2.generate_keypair()
-          {:ok, priv1, _pub1} = Guomi.SM2.generate_keypair()
-          message = "test message"
-          {:ok, signature} = Guomi.SM2.sign(message, priv1)
-          assert {:ok, false} = Guomi.SM2.verify(message, signature, pub2)
+      assert {:ok, priv1, _pub1} = SM2.generate_keypair()
+      assert {:ok, _priv2, pub2} = SM2.generate_keypair()
+      {:ok, signature} = SM2.sign("test message", priv1)
 
-        {:error, :unsupported} ->
-          assert true
+      assert {:ok, false} = SM2.verify("test message", signature, pub2)
+    end
+
+    test "verify rejects malformed signature sizes" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+
+      {:ok, <<r::binary-size(32), _s::binary-size(32)>> = signature} =
+        SM2.sign("test", private_key)
+
+      assert {:error, :invalid_signature} = SM2.verify("test", <<>>, public_key)
+      assert {:error, :invalid_signature} = SM2.verify("test", r, public_key)
+
+      assert {:error, :invalid_signature} =
+               SM2.verify("test", signature <> signature, public_key)
+    end
+
+    test "verify returns false for in-range corrupted signature" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      {:ok, <<r::binary-size(32), _s::binary-size(32)>>} = SM2.sign("test", private_key)
+      corrupted = r <> <<1::256-big>>
+
+      assert {:ok, false} = SM2.verify("test", corrupted, public_key)
+    end
+
+    test "handles empty, binary, and iodata messages" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+
+      for message <- ["", <<0, 1, 2, 3, 0, 255, 128>>, ["hello", " ", "world"]] do
+        assert {:ok, signature} = SM2.sign(message, private_key)
+        assert {:ok, true} = SM2.verify(message, signature, public_key)
       end
     end
 
-    test "verify returns false for corrupted signature" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = "test"
-          {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          <<head::binary-size(60), _rest::binary>> = signature
-          corrupted = head <> <<0xFF, 0xFF>>
-          assert {:ok, false} = Guomi.SM2.verify(message, corrupted, public_key)
+    test "documents raw signature format" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
 
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
+      assert {:ok, <<r::binary-size(32), s::binary-size(32)>> = signature} =
+               SM2.sign("format check", private_key)
 
-    test "handles empty message" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = ""
-          assert {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "handles binary message with null bytes" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = <<0, 1, 2, 3, 0, 255, 128>>
-          assert {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "signature has expected size" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, _public_key} ->
-          {:ok, signature} = Guomi.SM2.sign("test", private_key)
-          assert byte_size(signature) == 64
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "documents current raw signature format" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = "format check"
-
-          {:ok, <<r::binary-size(32), s::binary-size(32)>> = signature} =
-            Guomi.SM2.sign(message, private_key)
-
-          assert byte_size(r) == 32
-          assert byte_size(s) == 32
-          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "handles iodata message" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          message = ["hello", " ", "world"]
-          assert {:ok, signature} = Guomi.SM2.sign(message, private_key)
-          assert {:ok, true} = Guomi.SM2.verify(message, signature, public_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert byte_size(r) == 32
+      assert byte_size(s) == 32
+      assert {:ok, true} = SM2.verify("format check", signature, public_key)
     end
   end
 
   describe "encrypt/2 and decrypt/2" do
     test "decrypt rejects ciphertext shorter than C1 plus C3" do
-      assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<1, 2, 3>>, <<0::256>>)
+      assert {:error, :invalid_ciphertext} = SM2.decrypt(<<1, 2, 3>>, <<1::256-big>>)
     end
 
-    test "encrypt/decrypt roundtrip when supported" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = "secret message"
-          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
-          assert decrypted == plaintext
+    test "encrypt/decrypt roundtrip for text, empty, binary, long, and iodata plaintexts" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
 
-        {:error, :unsupported} ->
-          assert true
+      plaintexts = [
+        "secret message",
+        "",
+        <<0, 1, 2, 3, 255, 128, 64>>,
+        String.duplicate("abcdefghij", 100),
+        ["hello", " ", "world"]
+      ]
+
+      for plaintext <- plaintexts do
+        expected = IO.iodata_to_binary(plaintext)
+        assert {:ok, ciphertext} = SM2.encrypt(plaintext, public_key)
+        assert {:ok, ^expected} = SM2.decrypt(ciphertext, private_key)
       end
     end
 
-    test "encrypt/decrypt with empty message" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = ""
-          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
-          assert decrypted == plaintext
+    test "decrypt with wrong private key fails authentication" do
+      assert {:ok, _priv1, pub1} = SM2.generate_keypair()
+      assert {:ok, priv2, _pub2} = SM2.generate_keypair()
+      {:ok, ciphertext} = SM2.encrypt("test", pub1)
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:error, :decryption_failed} = SM2.decrypt(ciphertext, priv2)
     end
 
-    test "encrypt/decrypt with binary data" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = <<0, 1, 2, 3, 255, 128, 64>>
-          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
-          assert decrypted == plaintext
+    test "decrypt with tampered ciphertext fails authentication" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      {:ok, ciphertext} = SM2.encrypt("test message", public_key)
+      <<c1::binary-size(65), c2::binary-size(10), rest::binary>> = ciphertext
+      tampered_c2 = :binary.copy(<<Bitwise.bxor(:binary.first(c2), 0xFF)>>, 10)
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:error, :decryption_failed} =
+               SM2.decrypt(c1 <> tampered_c2 <> rest, private_key)
     end
 
-    test "encrypt/decrypt with long message" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = String.duplicate("abcdefghij", 100)
-          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
-          assert decrypted == plaintext
+    test "ciphertext includes ephemeral public key and MAC overhead" do
+      assert {:ok, _private_key, public_key} = SM2.generate_keypair()
+      plaintext = "test"
 
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "decrypt with wrong private key" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, _priv1, pub1} ->
-          {:ok, priv2, _pub2} = Guomi.SM2.generate_keypair()
-          plaintext = "test"
-          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, pub1)
-          assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ciphertext, priv2)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "decrypt with invalid ciphertext" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, _public_key} ->
-          # Too short ciphertext
-          assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<1, 2, 3>>, private_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "decrypt with tampered ciphertext" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = "test message"
-          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          # Tamper with the encrypted data portion
-          <<c1::binary-size(65), c2::binary-size(10), rest::binary>> = ciphertext
-          tampered_c2 = :binary.copy(<<Bitwise.bxor(:binary.first(c2), 0xFF)>>, 10)
-          tampered = c1 <> tampered_c2 <> rest
-          assert {:error, :decryption_failed} = Guomi.SM2.decrypt(tampered, private_key)
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "ciphertext is larger than plaintext" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, _private_key, public_key} ->
-          plaintext = "test"
-          {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert byte_size(ciphertext) > byte_size(plaintext)
-          # Ciphertext = ephemeral pubkey (65) + encrypted data + MAC (32)
-          assert byte_size(ciphertext) >= 65 + 32
-
-        {:error, :unsupported} ->
-          assert true
-      end
-    end
-
-    test "handles iodata plaintext" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          plaintext = ["hello", " ", "world"]
-          assert {:ok, ciphertext} = Guomi.SM2.encrypt(plaintext, public_key)
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ciphertext, private_key)
-          assert decrypted == "hello world"
-
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:ok, ciphertext} = SM2.encrypt(plaintext, public_key)
+      assert byte_size(ciphertext) > byte_size(plaintext)
+      assert byte_size(ciphertext) >= 65 + 32
     end
 
     test "decrypt at exact 97-byte boundary" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, private_key, public_key} ->
-          # Empty plaintext → ciphertext = 65 (C1) + 0 (C2) + 32 (C3) = 97 bytes
-          {:ok, ct} = Guomi.SM2.encrypt("", public_key)
-          assert byte_size(ct) == 97
-          assert {:ok, decrypted} = Guomi.SM2.decrypt(ct, private_key)
-          assert decrypted == ""
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:ok, ct} = SM2.encrypt("", public_key)
+      assert byte_size(ct) == 97
+      assert {:ok, ""} = SM2.decrypt(ct, private_key)
     end
 
     test "decrypt rejects 96-byte ciphertext" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, _pub} ->
-          assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<0::96*8>>, priv)
+      assert {:ok, priv, _pub} = SM2.generate_keypair()
 
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:error, :invalid_ciphertext} = SM2.decrypt(<<0::96*8>>, priv)
     end
   end
 
   describe "invalid inputs" do
-    test "sign with invalid private key size" do
-      short_key = <<0::31*8>>
-      assert {:error, :unsupported} = Guomi.SM2.sign("test", short_key)
+    test "sign with invalid private key size or range" do
+      assert {:error, :invalid_key} = SM2.sign("test", <<0::31*8>>)
+      assert {:error, :invalid_key} = SM2.sign("test", <<0::33*8>>)
+      assert {:error, :invalid_key} = SM2.sign("test", <<0::256-big>>)
 
-      long_key = <<0::33*8>>
-      assert {:error, :unsupported} = Guomi.SM2.sign("test", long_key)
-
-      assert {:error, :unsupported} = Guomi.SM2.sign("test", <<>>)
+      order = Curve.n()
+      assert {:error, :invalid_key} = SM2.sign("test", <<order::256-big>>)
     end
 
-    test "verify with invalid signature sizes" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, pub} ->
-          {:ok, sig} = Guomi.SM2.sign("test", priv)
+    test "verify with invalid public key" do
+      assert {:ok, priv, _pub} = SM2.generate_keypair()
+      {:ok, sig} = SM2.sign("test", priv)
 
-          assert {:ok, false} = Guomi.SM2.verify("test", <<>>, pub)
-
-          <<r::32-binary, _s::32-binary>> = sig
-          assert {:ok, false} = Guomi.SM2.verify("test", r, pub)
-
-          assert {:ok, false} = Guomi.SM2.verify("test", sig <> sig, pub)
-
-        {:error, :unsupported} ->
-          assert true
-      end
+      assert {:error, :invalid_key} = SM2.verify("test", sig, <<0::64*8>>)
+      assert {:error, :invalid_key} = SM2.verify("test", sig, <<>>)
+      assert {:error, :invalid_key} = SM2.verify("test", sig, <<0x05, 0::64*8>>)
     end
 
-    test "verify with invalid public key sizes raises" do
-      case Guomi.SM2.generate_keypair() do
-        {:ok, priv, _pub} ->
-          {:ok, sig} = Guomi.SM2.sign("test", priv)
-
-          short_pub = <<0::64*8>>
-          assert {:error, :unsupported} = Guomi.SM2.verify("test", sig, short_pub)
-
-          assert {:error, :unsupported} = Guomi.SM2.verify("test", sig, <<>>)
-
-        {:error, :unsupported} ->
-          assert true
-      end
+    test "encrypt with invalid public key is an invalid key, not decryption failure" do
+      assert {:error, :invalid_key} = SM2.encrypt("test", <<0::64*8>>)
+      assert {:error, :invalid_key} = SM2.encrypt("test", <<>>)
+      assert {:error, :invalid_key} = SM2.encrypt("test", <<0x04, 0::64*8>>)
     end
 
-    test "encrypt with invalid public key" do
-      # Too short
-      assert {:error, :decryption_failed} = Guomi.SM2.encrypt("test", <<0::64*8>>)
+    test "decrypt with invalid private key" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      {:ok, ct} = SM2.encrypt("test", public_key)
 
-      # Empty
-      assert {:error, :decryption_failed} = Guomi.SM2.encrypt("test", <<>>)
-    end
-
-    test "decrypt with invalid private key size" do
-      ct = <<0::97*8>>
-      assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ct, <<0::31*8>>)
-      assert {:error, :decryption_failed} = Guomi.SM2.decrypt(ct, <<0::33*8>>)
-      assert {:error, :invalid_ciphertext} = Guomi.SM2.decrypt(<<0::96*8>>, <<0::256>>)
+      assert {:error, :invalid_key} = SM2.decrypt(ct, <<0::31*8>>)
+      assert {:error, :invalid_key} = SM2.decrypt(ct, <<0::33*8>>)
+      assert {:error, :invalid_key} = SM2.decrypt(ct, <<0::256-big>>)
+      assert {:ok, "test"} = SM2.decrypt(ct, private_key)
     end
   end
 end

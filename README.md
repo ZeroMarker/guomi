@@ -12,7 +12,7 @@
 |------|------|------|
 | SM2  | ✅ 已实现 | 密钥对生成、签名、验签、加密、解密 |
 | SM3  | ✅ 已实现 | 哈希、十六进制输出 |
-| SM4  | ✅ 已实现 | ECB/CBC 模式，支持 `:pkcs7` 与 `:none` 填充 |
+| SM4  | ✅ 已实现 | ECB/CBC/CTR 模式，ECB/CBC 支持 `:pkcs7` 与 `:none` 填充 |
 
 ## 依赖
 
@@ -27,7 +27,8 @@
 |------|------|
 | SM3 | 纯 Elixir 实现（GM/T 0004-2012 压缩函数），32 字节摘要 |
 | SM4 ECB/CBC | 纯 Elixir 实现（GM/T 0002-2012 S-box 与密钥扩展），支持 `:pkcs7` 与 `:none` 填充 |
-| SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算（Jacobian 坐标系），SM3 预哈希，64 字节 raw `r || s` 签名 |
+| SM4 CTR | 纯 Elixir 实现，16 字节初始计数器块按大端 128 位整数递增，不提供认证 |
+| SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算，SM3 预哈希，64 字节 raw `r || s` 签名 |
 | SM2 加密/解密 | 纯 Elixir ECDH + SM3 KDF + XOR + SM3 MAC，内部 `C1 || C2 || C3` 格式 |
 
 ## 安装
@@ -37,7 +38,7 @@
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.5.0"}
+    {:guomi, "~> 0.5.1"}
   ]
 end
 ```
@@ -82,7 +83,7 @@ Guomi.SM3.supported?()
 
 ### SM4 加密
 
-> 安全提示：ECB 模式只适合测试或兼容场景，不建议用于新数据加密。CBC 模式必须为每次加密使用不可预测且不复用的 16 字节 IV。
+> 安全提示：ECB 模式只适合测试或兼容场景，不建议用于新数据加密。CBC 模式必须为每次加密使用不可预测且不复用的 16 字节 IV。CTR 模式只提供机密性，不提供认证；同一密钥下计数器块不得复用。
 
 ```elixir
 key = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
@@ -100,6 +101,11 @@ plain = Base.decode16!("0123456789ABCDEFFEDCBA9876543210", case: :mixed)
 iv = <<0::128>>
 {:ok, cipher} = Guomi.SM4.encrypt_cbc("Hello, Guomi!", key, iv)
 {:ok, back} = Guomi.SM4.decrypt_cbc(cipher, key, iv)
+
+# CTR 模式（无填充，适合任意长度输入）
+counter = <<0::128>>
+{:ok, cipher} = Guomi.SM4.encrypt_ctr("Hello, Guomi!", key, counter)
+{:ok, back} = Guomi.SM4.decrypt_ctr(cipher, key, counter)
 
 # 检查运行时支持（始终为 true）
 Guomi.SM4.supported?()
@@ -228,6 +234,11 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.5.1] - 2026-05-31
+- Added SM4 CTR APIs for arbitrary-length data without padding
+- Tightened SM2 invalid-input error handling
+- Fixed SM2 signature scalar modular inverse and sign/verify timeout
+
 #### [0.5.0] - 2026-05-16
 - Pure Elixir SM2/SM3/SM4 implementations — no runtime OpenSSL dependency
 - All `supported?/0` now return `true` unconditionally
@@ -258,6 +269,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/ZeroMarker/guomi/compare/v0.4.0...v0.4.1
@@ -349,7 +361,7 @@ A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI �
 ## Roadmap
 
 ### v0.5.0+ 规划
-- [ ] 添加 SM4 CTR 模式
+- [x] 添加 SM4 CTR 模式
 - [ ] 增加性能基准测试
 - [ ] 优化 SM2 加密 KDF 实现
 - [ ] SM9 算法支持（基于身份的加密）

@@ -216,12 +216,6 @@ defmodule Guomi.CLI do
         IO.puts(Base.encode16(private_key, case: :lower))
         IO.puts("Public Key:")
         IO.puts(Base.encode16(public_key, case: :lower))
-
-      {:error, :unsupported} ->
-        fail([
-          "SM2 is not supported on this system.",
-          "Please ensure OpenSSL 3.0+ with SM2 support is installed."
-        ])
     end
   end
 
@@ -235,6 +229,9 @@ defmodule Guomi.CLI do
 
       {:error, :unsupported} ->
         fail("SM2 signing is not supported on this system.")
+
+      {:error, reason} ->
+        fail(format_sm2_error(reason))
     end
   end
 
@@ -254,6 +251,9 @@ defmodule Guomi.CLI do
 
       {:error, :unsupported} ->
         fail("SM2 verification is not supported on this system.")
+
+      {:error, reason} ->
+        fail(format_sm2_error(reason))
     end
   end
 
@@ -379,6 +379,9 @@ defmodule Guomi.CLI do
 
   defp format_sm2_error(:decryption_failed), do: "Decryption failed"
   defp format_sm2_error(:invalid_ciphertext), do: "Invalid ciphertext"
+  defp format_sm2_error(:invalid_key), do: "Invalid key"
+  defp format_sm2_error(:invalid_signature), do: "Invalid signature"
+  defp format_sm2_error(:unsupported), do: "SM2 is not supported on this system"
   defp format_sm2_error(_), do: "Unknown error"
 
   # Help messages
