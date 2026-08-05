@@ -165,8 +165,7 @@ defmodule Guomi.CLITest do
     priv_hex = Base.encode16(priv, case: :lower)
     pub_hex = Base.encode16(pub, case: :lower)
 
-    {sig_hex, 0} =
-      run_cli(["sm2", "--sign", "--private-key", priv_hex, "--message", "test"])
+    {sig_hex, 0} = run_cli(["sm2", "--sign", "--private-key", priv_hex, "--message", "test"])
 
     sig_hex = String.trim(sig_hex)
 
@@ -205,13 +204,11 @@ defmodule Guomi.CLITest do
     priv_hex = Base.encode16(priv, case: :lower)
     pub_hex = Base.encode16(pub, case: :lower)
 
-    {ct_hex, 0} =
-      run_cli(["sm2", "--encrypt", "--public-key", pub_hex, "--message", "secret"])
+    {ct_hex, 0} = run_cli(["sm2", "--encrypt", "--public-key", pub_hex, "--message", "secret"])
 
     ct_hex = String.trim(ct_hex)
 
-    {pt, 0} =
-      run_cli(["sm2", "--decrypt", "--private-key", priv_hex, "--ciphertext", ct_hex])
+    {pt, 0} = run_cli(["sm2", "--decrypt", "--private-key", priv_hex, "--ciphertext", ct_hex])
 
     assert String.trim(pt) == "secret"
   end

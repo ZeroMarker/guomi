@@ -47,10 +47,90 @@ defmodule Guomi.SM2.Curve do
   def p, do: @p
   def generator, do: {@gx, @gy}
 
-  # -- Point operations in affine coordinates ---------------------------------
+  # -- Point operations in Jacobian coordinates -------------------------------
+  #
+  # Jacobian point (X, Y, Z) represents affine (X/Z^2, Y/Z^3); the point at
+  # infinity is (1, 1, 0). Working in Jacobian coordinates defers the modular
+  # inversion to a single conversion at the end, which is the dominant cost in
+  # affine double-and-add (one extended-Euclid per point operation).
 
   def neg(:infinity), do: :infinity
   def neg({x, y}), do: {x, mod_sub(0, y)}
+
+  # Doubling, specialized for a = p - 3 (SM2's curve coefficient):
+  #   M = 3*X^2 + a*Z^4 = 3*(X^2 - Z^4)
+  defp jac_double({x, y, z}) do
+    if z == 0 do
+      {1, 1, 0}
+    else
+      a = mod_mul(x, x)
+      b = mod_mul(y, y)
+      c = mod_mul(b, b)
+      s = mod_mul(4, mod_mul(x, b))
+      zz = mod_mul(z, z)
+      m = mod_sub(mod_mul(3, a), mod_mul(3, mod_mul(zz, zz)))
+      x3 = mod_sub(mod_mul(m, m), mod_mul(2, s))
+      y3 = mod_sub(mod_mul(m, mod_sub(s, x3)), mod_mul(8, c))
+      z3 = mod_mul(2, mod_mul(y, z))
+      {x3, y3, z3}
+    end
+  end
+
+  # Mixed addition: P (Jacobian) + Q (affine {x2, y2}, Z2 = 1)
+  defp jac_add_mixed({_x, _y, 0}, {x2, y2}), do: {x2, y2, 1}
+
+  defp jac_add_mixed({x1, y1, z1}, {x2, y2}) do
+    z1z1 = mod_mul(z1, z1)
+    u2 = mod_mul(x2, z1z1)
+    s2 = mod_mul(y2, mod_mul(z1, z1z1))
+    h = mod_sub(u2, x1)
+    r = mod_mul(2, mod_sub(s2, y1))
+
+    cond do
+      h == 0 and r == 0 ->
+        jac_double({x1, y1, z1})
+
+      h == 0 ->
+        {1, 1, 0}
+
+      true ->
+        i = mod_mul(mod_mul(2, h), mod_mul(2, h))
+        j = mod_mul(h, i)
+        v = mod_mul(x1, i)
+        x3 = mod_sub(mod_sub(mod_mul(r, r), j), mod_mul(2, v))
+        y3 = mod_sub(mod_mul(r, mod_sub(v, x3)), mod_mul(2, mod_mul(y1, j)))
+        z3 = mod_mul(2, mod_mul(z1, h))
+        {x3, y3, z3}
+    end
+  end
+
+  defp jac_to_affine({_x, _y, 0}), do: :infinity
+
+  defp jac_to_affine({x, y, z}) do
+    z_inv = mod_inv(z, @p)
+    z2 = mod_mul(z_inv, z_inv)
+    {mod_mul(x, z2), mod_mul(y, mod_mul(z2, z_inv))}
+  end
+
+  defp jac_mul(point, k) do
+    # MSB-first double-and-add over the fixed 256-bit scalar: the accumulator
+    # is doubled every iteration and the affine base point is added via the
+    # fast mixed-addition path when the bit is set.
+    do_jac_mul(point, k, 255, {1, 1, 0})
+  end
+
+  defp do_jac_mul(_point, _k, -1, acc), do: acc
+
+  defp do_jac_mul(point, k, i, acc) do
+    acc = jac_double(acc)
+
+    acc =
+      if Bitwise.band(Bitwise.bsr(k, i), 1) == 1,
+        do: jac_add_mixed(acc, point),
+        else: acc
+
+    do_jac_mul(point, k, i - 1, acc)
+  end
 
   # -- Scalar multiplication ---------------------------------------------------
 
@@ -61,14 +141,7 @@ defmodule Guomi.SM2.Curve do
 
   def mul(point, k) do
     k_mod = rem(k, @n)
-    if k_mod == 0, do: :infinity, else: mul_aff(k_mod, point, :infinity)
-  end
-
-  defp mul_aff(0, _point, acc), do: acc
-
-  defp mul_aff(k, point, acc) do
-    acc = if Bitwise.band(k, 1) == 1, do: add_aff(acc, point), else: acc
-    mul_aff(Bitwise.bsr(k, 1), add_aff(point, point), acc)
+    if k_mod == 0, do: :infinity, else: jac_mul(point, k_mod) |> jac_to_affine()
   end
 
   # -- Encoding / Decoding ----------------------------------------------------

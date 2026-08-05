@@ -78,8 +78,7 @@ defmodule Guomi.SM2Test do
       assert {:error, :invalid_signature} = SM2.verify("test", <<>>, public_key)
       assert {:error, :invalid_signature} = SM2.verify("test", r, public_key)
 
-      assert {:error, :invalid_signature} =
-               SM2.verify("test", signature <> signature, public_key)
+      assert {:error, :invalid_signature} = SM2.verify("test", signature <> signature, public_key)
     end
 
     test "verify returns false for in-range corrupted signature" do
@@ -148,8 +147,7 @@ defmodule Guomi.SM2Test do
       <<c1::binary-size(65), c2::binary-size(10), rest::binary>> = ciphertext
       tampered_c2 = :binary.copy(<<Bitwise.bxor(:binary.first(c2), 0xFF)>>, 10)
 
-      assert {:error, :decryption_failed} =
-               SM2.decrypt(c1 <> tampered_c2 <> rest, private_key)
+      assert {:error, :decryption_failed} = SM2.decrypt(c1 <> tampered_c2 <> rest, private_key)
     end
 
     test "ciphertext includes ephemeral public key and MAC overhead" do

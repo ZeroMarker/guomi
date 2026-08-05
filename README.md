@@ -315,15 +315,19 @@ A: 确保部署环境满足：
 
 ### Q: 性能如何？
 
-A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI 使用。参考基准（M1 Max, OTP 26）：
+A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI 使用。参考基准（本机，OTP 26）：
 
-| 算法 | 操作 | 吞吐量 |
-|------|------|--------|
-| SM3 | hash | ~500 MB/s |
-| SM4 | ECB encrypt | ~200 MB/s |
-| SM4 | CBC encrypt | ~180 MB/s |
-| SM2 | sign | ~2000 ops/s |
-| SM2 | verify | ~1500 ops/s |
+| 算法 | 操作 | 吞吐量/耗时 |
+|------|------|------------|
+| SM3 | hash 1 MiB | ~6 MB/s |
+| SM4 | ECB encrypt 1 MiB | ~10 MB/s |
+| SM4 | CBC encrypt 1 MiB | ~7 MB/s |
+| SM2 | generate_keypair | ~2.5 ms/op |
+| SM2 | sign | ~1.7 ms/op |
+| SM2 | verify | ~3.4 ms/op |
+| SM2 | encrypt / decrypt | ~3.7 / ~1.8 ms/op |
+
+可在本机运行 `mix run bench/bench.exs` 复现基准结果。
 
 > 实际性能取决于硬件。对于需要极致性能的场景，纯 Erlang NIF 方案可能更优。
 
@@ -362,7 +366,7 @@ A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI �
 
 ### v0.5.0+ 规划
 - [x] 添加 SM4 CTR 模式
-- [ ] 增加性能基准测试
+- [x] 增加性能基准测试（`bench/bench.exs`）
 - [ ] 优化 SM2 加密 KDF 实现
 - [ ] SM9 算法支持（基于身份的加密）
 - [ ] 国密证书解析

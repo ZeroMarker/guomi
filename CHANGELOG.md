@@ -7,6 +7,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Optimized the pure-Elixir crypto cores (no API changes):
+  - SM3: replaced the per-block message-expansion Map with a rolling 16-word
+    window carried through the 64 rounds, precomputed T_j constants, and
+    shift-specialized rotations. Throughput roughly tripled (~5.9 MB/s for 1 MiB).
+  - SM2: scalar multiplication now uses Jacobian coordinates with a single
+    modular inversion per multiplication instead of one extended-Euclid per
+    point operation. Key generation/sign ~5x faster, verify/encrypt ~4x faster.
+  - SM4: the round transform L(tau(x)) is evaluated from a precomputed 256-entry
+    byte table instead of per-byte S-box lookups plus rotations. Throughput
+    roughly doubled (~9.7 MB/s for 1 MiB ECB).
+
+### Added
+
+- Added `bench/bench.exs` micro-benchmark (`mix run bench/bench.exs`).
+
 ## [0.5.1] - 2026-05-31
 
 ### Added
