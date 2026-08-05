@@ -9,6 +9,7 @@ defmodule Guomi.MixProject do
       version: @version,
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
+      test_coverage: [tool: ExCoveralls],
       deps: deps(),
       description: "Guomi cryptographic algorithms for Elixir (SM2/SM3/SM4)",
       package: package(),
@@ -29,7 +30,8 @@ defmodule Guomi.MixProject do
     [
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: :dev, runtime: false}
+      {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.18", only: :test, runtime: false}
     ]
   end
 

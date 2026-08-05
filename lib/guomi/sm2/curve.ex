@@ -77,15 +77,6 @@ defmodule Guomi.SM2.Curve do
     <<0x04, x::256-big, y::256-big>>
   end
 
-  def decode_public(<<0x04, x::32-binary, y::32-binary>>) do
-    {:binary.decode_unsigned(x, :big), :binary.decode_unsigned(y, :big)}
-  end
-
-  def decode_public(<<0x04, rest::binary>>) when byte_size(rest) == 64 do
-    <<x::32-binary, y::32-binary>> = rest
-    {:binary.decode_unsigned(x, :big), :binary.decode_unsigned(y, :big)}
-  end
-
   def encode_signature(r, s), do: <<r::256-big, s::256-big>>
 
   def decode_signature(<<r::32-binary, s::32-binary>>) do
@@ -94,10 +85,12 @@ defmodule Guomi.SM2.Curve do
 
   # -- Key generation ---------------------------------------------------------
 
+  # Private keys must be in [1, n - 2] (GM/T 0003-2012). A key of n - 1 would
+  # make (1 + d) ≡ 0 (mod n), which could never produce a valid signature.
   def generate_private_key do
     bytes = :crypto.strong_rand_bytes(32)
     k = :binary.decode_unsigned(bytes, :big)
-    if k == 0, do: generate_private_key(), else: rem(k, @n - 1) + 1
+    if k == 0, do: generate_private_key(), else: rem(k, @n - 2) + 1
   end
 
   def generate_keypair do
@@ -129,15 +122,25 @@ defmodule Guomi.SM2.Curve do
   end
 
   defp sign_with_e(e, d) do
+    case mod_inv(1 + d, @n) do
+      # 1 + d ≡ 0 (mod n) means d = n - 1, outside the valid private key
+      # range. Reject it as an invalid key instead of looping forever on
+      # s = 0 (every retry would produce s = 0 again).
+      0 -> {:error, :invalid_key}
+      inv -> do_sign_with_e(e, d, inv)
+    end
+  end
+
+  defp do_sign_with_e(e, d, inv) do
     k = generate_k()
     {x1, _y1} = mul(generator(), k)
     r = scalar_add(e, x1)
 
     if r == 0 or r + k == @n do
-      sign_with_e(e, d)
+      do_sign_with_e(e, d, inv)
     else
-      s = scalar_mul(mod_inv(1 + d, @n), scalar_sub(k, scalar_mul(r, d)))
-      if s == 0, do: sign_with_e(e, d), else: {:ok, encode_signature(r, s)}
+      s = scalar_mul(inv, scalar_sub(k, scalar_mul(r, d)))
+      if s == 0, do: do_sign_with_e(e, d, inv), else: {:ok, encode_signature(r, s)}
     end
   end
 
@@ -203,9 +206,5 @@ defmodule Guomi.SM2.Curve do
     x3 = mod_sub(mod_sub(mod_mul(lam, lam), x1), x2)
     y3 = mod_sub(mod_mul(lam, mod_sub(x1, x3)), y1)
     {x3, y3}
-  end
-
-  def private_key_to_int(key_bin) when byte_size(key_bin) == 32 do
-    :binary.decode_unsigned(key_bin, :big)
   end
 end

@@ -55,6 +55,8 @@ config/config.local.exs
 
 opencode.jsonc
 
+.reasonix/
+
 skills/
 
 .clawhub

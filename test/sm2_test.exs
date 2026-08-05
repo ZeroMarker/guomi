@@ -24,6 +24,15 @@ defmodule Guomi.SM2Test do
       refute priv1 == priv2
       refute pub1 == pub2
     end
+
+    test "generates private keys in the standard [1, n-2] range" do
+      for _ <- 1..20 do
+        assert {:ok, private_key, _public_key} = SM2.generate_keypair()
+        priv = :binary.decode_unsigned(private_key, :big)
+        assert priv > 0
+        assert priv < Curve.n() - 1
+      end
+    end
   end
 
   describe "curve arithmetic" do
@@ -175,6 +184,11 @@ defmodule Guomi.SM2Test do
 
       order = Curve.n()
       assert {:error, :invalid_key} = SM2.sign("test", <<order::256-big>>)
+
+      # n - 1 is outside the standard private key range [1, n - 2]. It must be
+      # rejected deterministically instead of hanging in a sign retry loop
+      # (regression: (1 + d) ≡ 0 (mod n) makes s always 0).
+      assert {:error, :invalid_key} = SM2.sign("test", <<Curve.n() - 1::256-big>>)
     end
 
     test "verify with invalid public key" do
