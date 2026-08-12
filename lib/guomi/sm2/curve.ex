@@ -132,6 +132,31 @@ defmodule Guomi.SM2.Curve do
     do_jac_mul(point, k, i - 1, acc)
   end
 
+  # Joint scalar multiplication computes k1*P1 + k2*P2 in one pass. This
+  # shares all 256 doublings and keeps the sum in Jacobian coordinates, so
+  # signature verification needs only one final modular inversion.
+  defp jac_mul_add(point1, k1, point2, k2) do
+    do_jac_mul_add(point1, k1, point2, k2, 255, {1, 1, 0})
+  end
+
+  defp do_jac_mul_add(_point1, _k1, _point2, _k2, -1, acc), do: acc
+
+  defp do_jac_mul_add(point1, k1, point2, k2, i, acc) do
+    acc = jac_double(acc)
+
+    acc =
+      if Bitwise.band(Bitwise.bsr(k1, i), 1) == 1,
+        do: jac_add_mixed(acc, point1),
+        else: acc
+
+    acc =
+      if Bitwise.band(Bitwise.bsr(k2, i), 1) == 1,
+        do: jac_add_mixed(acc, point2),
+        else: acc
+
+    do_jac_mul_add(point1, k1, point2, k2, i - 1, acc)
+  end
+
   # -- Scalar multiplication ---------------------------------------------------
 
   # Public entry point: returns affine point
@@ -253,31 +278,9 @@ defmodule Guomi.SM2.Curve do
   end
 
   defp verify_signature_point(e, r, s, public_key, t) do
-    p1 = mul(generator(), s)
-    p2 = mul(public_key, t)
-
-    case add_aff(p1, p2) do
+    case generator() |> jac_mul_add(s, public_key, t) |> jac_to_affine() do
       :infinity -> false
       {x1, _y1} -> scalar_add(e, x1) == r
     end
-  end
-
-  # Fallback affine addition for verify (not performance-critical)
-  defp add_aff(:infinity, q), do: q
-  defp add_aff(p, :infinity), do: p
-  defp add_aff({x1, y1}, {x2, y2}) when x1 == x2 and rem(y1 + y2, @p) == 0, do: :infinity
-
-  defp add_aff({x, y}, {x, y}) do
-    lam = mod_mul(mod_sub(mod_mul(3, mod_mul(x, x)), 3), mod_inv(mod_mul(2, y)))
-    x3 = mod_sub(mod_mul(lam, lam), mod_mul(2, x))
-    y3 = mod_sub(mod_mul(lam, mod_sub(x, x3)), y)
-    {x3, y3}
-  end
-
-  defp add_aff({x1, y1}, {x2, y2}) do
-    lam = mod_mul(mod_sub(y2, y1), mod_inv(mod_sub(x2, x1)))
-    x3 = mod_sub(mod_sub(mod_mul(lam, lam), x1), x2)
-    y3 = mod_sub(mod_mul(lam, mod_sub(x1, x3)), y1)
-    {x3, y3}
   end
 end
