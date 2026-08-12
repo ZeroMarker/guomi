@@ -189,10 +189,18 @@ defmodule Guomi.OpenSSLCompatTest do
 
   defp with_sm2_files(message, private_key, public_key, fun) do
     with_temp_file(message, fn message_path ->
-      with_temp_file(sm2_private_pem(private_key, public_key), fn key_path ->
-        with_temp_output(fn signature_path -> fun.(message_path, key_path, signature_path) end)
-      end)
+      with_sm2_key_file(message_path, private_key, public_key, fun)
     end)
+  end
+
+  defp with_sm2_key_file(message_path, private_key, public_key, fun) do
+    with_temp_file(sm2_private_pem(private_key, public_key), fn key_path ->
+      with_sm2_output_file(message_path, key_path, fun)
+    end)
+  end
+
+  defp with_sm2_output_file(message_path, key_path, fun) do
+    with_temp_output(fn output_path -> fun.(message_path, key_path, output_path) end)
   end
 
   test "SM3 CLI output matches OpenSSL" do
