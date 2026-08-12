@@ -34,6 +34,18 @@ defmodule Guomi.SM2Test do
       assert inverse != 0
       assert rem(2 * inverse, order) == 1
     end
+
+    test "scalar multiplication matches fixed SM2 curve vectors" do
+      assert Curve.mul(Curve.generator(), 1) == Curve.generator()
+
+      assert Curve.mul(Curve.generator(), 2) ==
+               {0x56CEFD60D7C87C000D58EF57FA73BA4D9C0DFA08C08A7331495C2E1DA3F2BD52,
+                0x31B7E7E6CC8189F668535CE0F8EAF1BD6DE84C182F6C8E716F780D3A970A23C3}
+
+      assert Curve.mul(Curve.generator(), 3) ==
+               {0xA97F7CD4B3C993B4BE2DAA8CDB41E24CA13F6BD945302244E26918F1D0509EBF,
+                0x530B5DD88C688EF5CCC5CEC08A72150F7C400EE5CD045292AAACDD037458F6E6}
+    end
   end
 
   describe "sign/2 and verify/3" do

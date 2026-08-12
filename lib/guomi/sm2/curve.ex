@@ -11,6 +11,7 @@ defmodule Guomi.SM2.Curve do
 
   # -- Field operations -------------------------------------------------------
 
+  defp mod_add(a, b), do: mod(a + b, @p)
   defp mod_sub(a, b), do: mod(a - b, @p)
   defp mod_mul(a, b), do: mod(a * b, @p)
 
@@ -61,14 +62,79 @@ defmodule Guomi.SM2.Curve do
 
   def mul(point, k) do
     k_mod = rem(k, @n)
-    if k_mod == 0, do: :infinity, else: mul_aff(k_mod, point, :infinity)
+
+    if k_mod == 0 do
+      :infinity
+    else
+      k_mod
+      |> mul_jac(to_jacobian(point), {0, 1, 0})
+      |> from_jacobian()
+    end
   end
 
-  defp mul_aff(0, _point, acc), do: acc
+  defp mul_jac(0, _point, acc), do: acc
 
-  defp mul_aff(k, point, acc) do
-    acc = if Bitwise.band(k, 1) == 1, do: add_aff(acc, point), else: acc
-    mul_aff(Bitwise.bsr(k, 1), add_aff(point, point), acc)
+  defp mul_jac(k, point, acc) do
+    acc = if Bitwise.band(k, 1) == 1, do: jac_add(acc, point), else: acc
+    mul_jac(Bitwise.bsr(k, 1), jac_double(point), acc)
+  end
+
+  # Jacobian coordinates avoid a modular inverse for every intermediate point
+  # operation. Only the final conversion back to affine coordinates needs one.
+  defp to_jacobian({x, y}), do: {x, y, 1}
+
+  defp from_jacobian({_x, _y, 0}), do: :infinity
+
+  defp from_jacobian({x, y, z}) do
+    z_inv = mod_inv(z)
+    z_inv_sq = mod_mul(z_inv, z_inv)
+    {mod_mul(x, z_inv_sq), mod_mul(y, mod_mul(z_inv_sq, z_inv))}
+  end
+
+  defp jac_double({_x, 0, _z}), do: {0, 1, 0}
+  defp jac_double({_x, _y, 0}), do: {0, 1, 0}
+
+  defp jac_double({x, y, z}) do
+    xx = mod_mul(x, x)
+    yy = mod_mul(y, y)
+    yyyy = mod_mul(yy, yy)
+    zz = mod_mul(z, z)
+    s = mod_mul(4, mod_mul(x, yy))
+    m = mod_add(mod_mul(3, xx), mod_mul(@a, mod_mul(zz, zz)))
+    x3 = mod_sub(mod_mul(m, m), mod_mul(2, s))
+    y3 = mod_sub(mod_mul(m, mod_sub(s, x3)), mod_mul(8, yyyy))
+    z3 = mod_mul(2, mod_mul(y, z))
+    {x3, y3, z3}
+  end
+
+  defp jac_add({_x, _y, 0}, point), do: point
+  defp jac_add(point, {_x, _y, 0}), do: point
+
+  defp jac_add({x1, y1, z1} = p1, {x2, y2, z2}) do
+    z1_sq = mod_mul(z1, z1)
+    z2_sq = mod_mul(z2, z2)
+    u1 = mod_mul(x1, z2_sq)
+    u2 = mod_mul(x2, z1_sq)
+    s1 = mod_mul(y1, mod_mul(z2, z2_sq))
+    s2 = mod_mul(y2, mod_mul(z1, z1_sq))
+
+    cond do
+      u1 != u2 -> jac_add_distinct(u1, u2, s1, s2, z1, z2)
+      s1 == s2 -> jac_double(p1)
+      true -> {0, 1, 0}
+    end
+  end
+
+  defp jac_add_distinct(u1, u2, s1, s2, z1, z2) do
+    h = mod_sub(u2, u1)
+    r = mod_sub(s2, s1)
+    h_sq = mod_mul(h, h)
+    h_cubed = mod_mul(h, h_sq)
+    u1_h_sq = mod_mul(u1, h_sq)
+    x3 = mod_sub(mod_sub(mod_mul(r, r), h_cubed), mod_mul(2, u1_h_sq))
+    y3 = mod_sub(mod_mul(r, mod_sub(u1_h_sq, x3)), mod_mul(s1, h_cubed))
+    z3 = mod_mul(h, mod_mul(z1, z2))
+    {x3, y3, z3}
   end
 
   # -- Encoding / Decoding ----------------------------------------------------
