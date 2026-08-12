@@ -122,6 +122,63 @@ defmodule Guomi.SM2Test do
     end
   end
 
+  describe "standard signatures" do
+    test "matches the GB/T 32918.5 recommended-curve ZA and signature vector" do
+      public_key =
+        Base.decode16!(
+          "04" <>
+            "09F9DF311E5421A150DD7D161E4BC5C672179FAD1833FC076BB08FF356F35020" <>
+            "CCEA490CE26775A52DC6EA718CC1AA600AED05FBF35E084A6632F6072DA9AD13"
+        )
+
+      expected_za =
+        Base.decode16!("B2E14C5C79C6DF5B85F4FE7ED8DB7A262B9DA7E07CCB0EA9F4747B8CCDA8A4F3")
+
+      signature =
+        Base.decode16!(
+          "F5A03B0648D2C4630EEAC513E1BB81A15944DA3827D5B74143AC7EACEEE720B3" <>
+            "B1B6AA29DF212FD8763182BC0D421CA1BB9038FD1F7F42D4840B69C485BBC1AA"
+        )
+
+      assert {:ok, ^expected_za} =
+               SM2.user_identity_digest("1234567812345678", public_key)
+
+      assert {:ok, true} =
+               SM2.verify_standard(
+                 "message digest",
+                 signature,
+                 public_key,
+                 "1234567812345678"
+               )
+    end
+
+    test "ZA is deterministic and binds the user ID and public key" do
+      assert {:ok, _private_key, public_key} = SM2.generate_keypair()
+      assert {:ok, _other_private_key, other_public_key} = SM2.generate_keypair()
+
+      assert {:ok, za} = SM2.user_identity_digest("1234567812345678", public_key)
+      assert byte_size(za) == 32
+      assert {:ok, ^za} = SM2.user_identity_digest("1234567812345678", public_key)
+      refute SM2.user_identity_digest("other", public_key) == {:ok, za}
+      refute SM2.user_identity_digest("1234567812345678", other_public_key) == {:ok, za}
+    end
+
+    test "standard sign and verify require the same user ID" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      assert {:ok, signature} = SM2.sign_standard("message", private_key, "alice")
+      assert {:ok, true} = SM2.verify_standard("message", signature, public_key, "alice")
+      assert {:ok, false} = SM2.verify_standard("message", signature, public_key, "bob")
+    end
+
+    test "rejects user IDs whose bit length does not fit ENTLA" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      oversized = :binary.copy(<<0>>, 8192)
+
+      assert {:error, :invalid_input} = SM2.user_identity_digest(oversized, public_key)
+      assert {:error, :invalid_input} = SM2.sign_standard("message", private_key, oversized)
+    end
+  end
+
   describe "encrypt/2 and decrypt/2" do
     test "decrypt rejects ciphertext shorter than C1 plus C3" do
       assert {:error, :invalid_ciphertext} = SM2.decrypt(<<1, 2, 3>>, <<1::256-big>>)
@@ -186,7 +243,83 @@ defmodule Guomi.SM2Test do
     end
   end
 
+  describe "standard encryption" do
+    test "decrypts the GB/T 32918.5 Annex C recommended-curve vector" do
+      private_key =
+        Base.decode16!("3945208F7B2144B13F36E38AC6D39F95889393692860B51A42FB81EF4DF7C5B8")
+
+      ciphertext =
+        Base.decode16!(
+          "04" <>
+            "04EBFC718E8D1798620432268E77FEB6415E2EDE0E073C0F4F640ECD2E149A73" <>
+            "E858F9D81E5430A57B36DAAB8F950A3C64E6EE6A63094D99283AFF767E124DF0" <>
+            "59983C18F809E262923C53AEC295D30383B54E39D609D160AFCB1908D0BD8766" <>
+            "21886CA989CA9C7D58087307CA93092D651EFA"
+        )
+
+      assert {:ok, "encryption standard"} =
+               SM2.decrypt_standard(ciphertext, private_key)
+    end
+
+    test "roundtrips long messages with C1 || C3 || C2 framing" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      plaintext = :binary.copy("standard sm2 message ", 10)
+
+      assert {:ok, ciphertext} = SM2.encrypt_standard(plaintext, public_key)
+      assert byte_size(ciphertext) == 65 + 32 + byte_size(plaintext)
+      assert {:ok, ^plaintext} = SM2.decrypt_standard(ciphertext, private_key)
+    end
+
+    test "decryption accepts n - 1, which is valid for encryption but not signing" do
+      private_int = Curve.n() - 1
+      private_key = <<private_int::256-big>>
+      public_key = Curve.generator() |> Curve.mul(private_int) |> Curve.encode_public()
+
+      assert {:ok, ciphertext} = SM2.encrypt_standard("encryption-only key", public_key)
+      assert {:ok, "encryption-only key"} = SM2.decrypt_standard(ciphertext, private_key)
+      assert {:error, :invalid_key} = SM2.sign_standard("message", private_key, "user")
+    end
+
+    test "standard KDF does not repeat a 32-byte mask block" do
+      assert {:ok, _private_key, public_key} = SM2.generate_keypair()
+      plaintext = :binary.copy(<<0>>, 64)
+      assert {:ok, <<_c1::binary-size(65), _c3::binary-size(32), c2::binary>>} =
+               SM2.encrypt_standard(plaintext, public_key)
+      <<first::binary-size(32), second::binary-size(32)>> = c2
+      refute first == second
+    end
+
+    test "rejects tampering, empty plaintext, and cross-format decryption" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      assert {:error, :invalid_input} = SM2.encrypt_standard("", public_key)
+      assert {:ok, ciphertext} = SM2.encrypt_standard("message", public_key)
+      last = byte_size(ciphertext) - 1
+      <<prefix::binary-size(last), byte>> = ciphertext
+      tampered = prefix <> <<Bitwise.bxor(byte, 1)>>
+
+      assert {:error, :decryption_failed} = SM2.decrypt_standard(tampered, private_key)
+      assert {:error, :invalid_ciphertext} = SM2.decrypt_standard(<<0>>, private_key)
+
+      invalid_c1 = <<0x04, 0::64*8, 0::32*8, 1>>
+      assert {:error, :decryption_failed} = SM2.decrypt_standard(invalid_c1, private_key)
+
+      assert {:error, _reason} = SM2.decrypt(ciphertext, private_key)
+
+      assert {:ok, legacy} = SM2.encrypt("message", public_key)
+      assert {:error, _reason} = SM2.decrypt_standard(legacy, private_key)
+    end
+  end
+
   describe "invalid inputs" do
+    test "invalid iodata is reported as invalid input" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      assert {:ok, signature} = SM2.sign("valid", private_key)
+
+      assert {:error, :invalid_input} = SM2.sign(["valid", :not_iodata], private_key)
+      assert {:error, :invalid_input} = SM2.verify([:not_iodata], signature, public_key)
+      assert {:error, :invalid_input} = SM2.encrypt([:not_iodata], public_key)
+    end
+
     test "sign with invalid private key size or range" do
       assert {:error, :invalid_key} = SM2.sign("test", <<0::31*8>>)
       assert {:error, :invalid_key} = SM2.sign("test", <<0::33*8>>)

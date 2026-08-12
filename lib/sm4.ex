@@ -329,9 +329,17 @@ defmodule Guomi.SM4 do
   }
 
   @spec supported?() :: boolean()
+  @doc "Returns `true`; SM4 is implemented entirely in Elixir."
   def supported?, do: true
 
   @spec encrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Encrypts `plaintext` with SM4-ECB and a 16-byte `key`.
+
+  `:padding` may be `:pkcs7` (default) or `:none`. With `:none`, the input must
+  be block-aligned. ECB does not provide semantic security or integrity and is
+  unsuitable for structured or sensitive messages.
+  """
   def encrypt(plaintext, key, opts \\ []) when is_binary(plaintext) and is_binary(key) do
     with :ok <- validate_key(key),
          {:ok, data} <- pad(plaintext, opts) do
@@ -342,6 +350,12 @@ defmodule Guomi.SM4 do
   end
 
   @spec decrypt(binary(), binary(), keyword()) :: {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Decrypts SM4-ECB `ciphertext` with a 16-byte `key`.
+
+  `:padding` must match encryption and may be `:pkcs7` (default) or `:none`.
+  Returns an error for invalid key, block size, padding option, or PKCS#7 data.
+  """
   def decrypt(ciphertext, key, opts \\ []) when is_binary(ciphertext) and is_binary(key) do
     with :ok <- validate_key(key),
          :ok <- validate_block(ciphertext),
@@ -355,6 +369,12 @@ defmodule Guomi.SM4 do
 
   @spec encrypt_cbc(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Encrypts with SM4-CBC using a 16-byte `key` and 16-byte unpredictable `iv`.
+
+  `:padding` may be `:pkcs7` (default) or `:none`. CBC provides confidentiality
+  only; callers that need integrity must authenticate the IV and ciphertext.
+  """
   def encrypt_cbc(plaintext, key, iv, opts \\ [])
       when is_binary(plaintext) and is_binary(key) and is_binary(iv) do
     with :ok <- validate_key(key),
@@ -368,6 +388,11 @@ defmodule Guomi.SM4 do
 
   @spec decrypt_cbc(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Decrypts SM4-CBC using the same 16-byte `key`, 16-byte `iv`, and padding mode.
+
+  Successful padding removal does not authenticate the message.
+  """
   def decrypt_cbc(ciphertext, key, iv, opts \\ [])
       when is_binary(ciphertext) and is_binary(key) and is_binary(iv) do
     with :ok <- validate_key(key),
@@ -383,6 +408,13 @@ defmodule Guomi.SM4 do
 
   @spec encrypt_ctr(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Encrypts arbitrary-length input with SM4-CTR.
+
+  `counter` is a 16-byte initial counter block interpreted as a big-endian
+  128-bit integer. It must never be reused with the same key. CTR has no padding
+  and provides no integrity; consequently `opts` must be empty.
+  """
   def encrypt_ctr(plaintext, key, counter, opts \\ [])
       when is_binary(plaintext) and is_binary(key) and is_binary(counter) do
     with :ok <- validate_key(key),
@@ -394,6 +426,12 @@ defmodule Guomi.SM4 do
 
   @spec decrypt_ctr(binary(), binary(), binary(), keyword()) ::
           {:ok, binary()} | {:error, error_reason()}
+  @doc """
+  Decrypts SM4-CTR data with the original 16-byte key and initial counter block.
+
+  CTR encryption and decryption are the same operation. This function does not
+  authenticate ciphertext.
+  """
   def decrypt_ctr(ciphertext, key, counter, opts \\ [])
       when is_binary(ciphertext) and is_binary(key) and is_binary(counter) do
     encrypt_ctr(ciphertext, key, counter, opts)

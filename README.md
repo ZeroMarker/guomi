@@ -7,12 +7,15 @@
 
 国密算法纯 Elixir 实现（GM/T 0002-2012, GM/T 0003-2012, GM/T 0004-2012），无需外部依赖。
 
-> 当前 SM2 签名与加密接口有明确的兼容性限制，不应直接视为完整的跨实现标准 SM2 接口；其中加密接口不得用于保护敏感数据。详见[兼容性与安全边界](#兼容性与安全边界)。
+> SM2 标准接口已有公开向量和 OpenSSL 互操作测试，但尚未完成独立安全审查；旧兼容加密接口不得用于保护敏感数据。详见[兼容性与安全边界](#兼容性与安全边界)。
 
 ## 文档导航
 
 - [库 API 快速入门](#使用)
 - [命令行工具完整说明](cli.md)
+- [SM2 标准兼容与迁移设计](sm2_migration.md)
+- [安全策略与适用边界](SECURITY.md)
+- [流式 API、证书与 SM9 范围](future_work.md)
 - [版本变更记录](CHANGELOG.md)
 - [开发路线图](todo.md)
 - [发布维护指南](hex.pm.md)
@@ -39,8 +42,8 @@
 | SM3 | 纯 Elixir 实现（GM/T 0004-2012 压缩函数），32 字节摘要 |
 | SM4 ECB/CBC | 纯 Elixir 实现（GM/T 0002-2012 S-box 与密钥扩展），支持 `:pkcs7` 与 `:none` 填充 |
 | SM4 CTR | 纯 Elixir 实现，16 字节初始计数器块按大端 128 位整数递增，不提供认证 |
-| SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算，SM3 预哈希，64 字节 raw `r || s` 签名 |
-| SM2 加密/解密 | Guomi 内部 `C1 || C2 || C3` 格式，仅保留用于兼容和测试；不得用于敏感数据 |
+| SM2 密钥/签名 | 标准接口计算 ZA，签名为 64 字节 raw `r || s`；另保留不计算 ZA 的旧兼容接口 |
+| SM2 加密/解密 | 标准接口使用 `C1 || C3 || C2` 和 SM3 KDF；旧 `C1 || C2 || C3` 接口仅用于兼容 |
 
 ## API 约定
 
@@ -161,6 +164,16 @@ Guomi.SM4.supported?()
 # 解密
 {:ok, plaintext} = Guomi.SM2.decrypt(ciphertext, private_key)
 
+# 标准签名 API 要求显式 user ID，并计算 SM3(ZA || message)
+user_id = "1234567812345678"
+{:ok, standard_signature} = Guomi.SM2.sign_standard("message", private_key, user_id)
+{:ok, true} =
+  Guomi.SM2.verify_standard("message", standard_signature, public_key, user_id)
+
+# 标准加密使用 C1 || C3 || C2 与可扩展 SM3 KDF（当前拒绝空消息）
+{:ok, standard_ciphertext} = Guomi.SM2.encrypt_standard("secret message", public_key)
+{:ok, "secret message"} = Guomi.SM2.decrypt_standard(standard_ciphertext, private_key)
+
 # 检查运行时支持（始终为 true）
 Guomi.SM2.supported?()
 #=> true
@@ -176,7 +189,7 @@ Guomi.SM2.verify("message", <<0>>, <<0>>)
 #=> {:error, :invalid_key}
 ```
 
-SM2 可能返回 `:invalid_key`、`:invalid_signature`、`:invalid_ciphertext` 或 `:decryption_failed`。SM4 可能返回 `:invalid_key_size`、`:invalid_iv_size`、`:invalid_block_size` 或 `:invalid_padding`。
+SM2 可能返回 `:invalid_input`、`:invalid_key`、`:invalid_signature`、`:invalid_ciphertext` 或 `:decryption_failed`。SM4 可能返回 `:invalid_key_size`、`:invalid_iv_size`、`:invalid_block_size` 或 `:invalid_padding`。
 
 ## CLI 工具
 
@@ -222,7 +235,7 @@ guomi sm2 --generate
 echo "message" | guomi sm2 --sign --private-key <hex-key>
 
 # SM2 验签
-guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
+guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> --file message.txt
 ```
 
 ### 完整文档
@@ -341,8 +354,8 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ## 兼容性与安全边界
 
-- **SM2 签名**：使用 SM3 预哈希与 raw `r || s` 签名格式，未实现用户 ID/ZA 参数，不应假定与 OpenSSL 或其他 SM2 实现互通。
-- **SM2 加密**：采用本库内部的 ECDH + SM3 派生密钥 + XOR + SM3 MAC 构造及 `C1 || C2 || C3` 格式。当前实现会对超过 32 字节的消息重复使用同一段 XOR 掩码，使相隔 32 字节的密文泄露对应明文的 XOR 关系；即使 MAC 能检测篡改，也不能修复该机密性缺陷。此接口仅保留用于兼容和测试，不得用于保护敏感数据或生产协议。
+- **SM2 签名**：`sign_standard/3`、`verify_standard/4` 提供显式用户 ID/ZA 的 raw `r || s` 接口；旧 `sign/2`、`verify/3` 只对消息做 SM3 预哈希，仅用于兼容。
+- **SM2 加密**：`encrypt_standard/2`、`decrypt_standard/2` 使用 `C1 || C3 || C2` 与可扩展 SM3 KDF，但仍未经独立安全审查。旧 `encrypt/2`、`decrypt/2` 采用内部 `C1 || C2 || C3` 格式并对超过 32 字节的消息重复 XOR 掩码，仅用于兼容和测试，不得用于保护敏感数据或生产协议。
 - **ECB**：会泄露明文模式，不要用于新系统中的敏感数据保护。
 - **CBC**：每次加密必须使用不可预测且不复用的 16 字节 IV；当前接口不提供认证。
 - **CTR**：同一密钥下不得复用初始计数器块；当前接口只提供机密性，不提供认证。

@@ -24,13 +24,29 @@ defmodule Guomi.SM3 do
       |> List.to_tuple()
 
   @spec supported?() :: boolean()
+  @doc "Returns `true`; SM3 is implemented entirely in Elixir."
   def supported?, do: true
 
   @spec hash(input()) :: binary()
+  @doc """
+  Hashes binary or iodata input and returns the 32-byte SM3 digest.
+
+  Raises `ArgumentError` when `data` is not valid iodata.
+  """
   def hash(data) when is_binary(data), do: do_hash(data)
   def hash(data), do: data |> IO.iodata_to_binary() |> do_hash()
 
   @spec hash_hex(input()) :: String.t()
+  @doc """
+  Hashes binary or iodata input and returns a 64-character lowercase hex digest.
+
+  Raises `ArgumentError` when `data` is not valid iodata.
+
+  ## Example
+
+      iex> Guomi.SM3.hash_hex("abc")
+      "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+  """
   def hash_hex(data) do
     data |> hash() |> Base.encode16(case: :lower)
   end

@@ -18,6 +18,8 @@ defmodule Guomi.CLI do
 
   @version Mix.Project.config()[:version]
 
+  @doc "Runs the escript entry point and converts unhandled errors to exit status 1."
+  @spec main([String.t()]) :: no_return() | :ok
   def main(args) do
     run(args)
   rescue
@@ -26,6 +28,8 @@ defmodule Guomi.CLI do
       System.halt(1)
   end
 
+  @doc "Dispatches parsed command-line arguments. Primarily exposed for integration tests."
+  @spec run([String.t()]) :: no_return() | :ok
   def run([]) do
     print_help()
   end
@@ -63,13 +67,22 @@ defmodule Guomi.CLI do
   end
 
   defp handle_sm3(args) do
-    {opts, remaining, _} = OptionParser.parse(args, strict: [hex: :boolean, help: :boolean])
+    {opts, remaining, invalid} =
+      OptionParser.parse(args, strict: [hex: :boolean, file: :string, help: :boolean])
 
+    if invalid != [] do
+      fail("Unknown or invalid SM3 option: #{format_invalid_options(invalid)}")
+    else
+      handle_parsed_sm3(opts, remaining)
+    end
+  end
+
+  defp handle_parsed_sm3(opts, remaining) do
     if opts[:help] do
       print_sm3_help()
     else
       ensure_sm3_supported!()
-      input = read_input(remaining)
+      input = read_input(remaining, opts)
 
       if opts[:hex] do
         hash = Guomi.SM3.hash_hex(input)
@@ -87,39 +100,49 @@ defmodule Guomi.CLI do
   end
 
   defp handle_sm4(args) do
-    {opts, remaining, _} =
+    {opts, remaining, invalid} =
       OptionParser.parse(args,
         strict: [
           mode: :string,
           key: :string,
           iv: :string,
+          counter: :string,
           decrypt: :boolean,
           hex: :boolean,
           input_hex: :boolean,
           output_hex: :boolean,
           padding: :string,
+          file: :string,
           help: :boolean
         ]
       )
 
+    if invalid != [] do
+      fail("Unknown or invalid SM4 option: #{format_invalid_options(invalid)}")
+    else
+      handle_parsed_sm4(opts, remaining)
+    end
+  end
+
+  defp handle_parsed_sm4(opts, remaining) do
     if opts[:help] do
       print_sm4_help()
     else
       mode = Keyword.get(opts, :mode, "ecb")
       key = required_hex_or_exit(opts[:key], "key")
-      iv = validate_sm4_iv(mode, opts[:iv])
-      padding = parse_padding_or_exit(Keyword.get(opts, :padding, "pkcs7"))
+      iv_or_counter = validate_sm4_parameter(mode, opts)
+      padding = parse_sm4_padding(mode, opts)
       decrypt? = Keyword.get(opts, :decrypt, false)
       hex? = Keyword.get(opts, :hex, false)
       input_hex? = sm4_input_hex?(opts, hex?, decrypt?)
       output_hex? = sm4_output_hex?(opts, hex?, decrypt?)
-      input = read_input(remaining)
+      input = read_input(remaining, opts)
 
       result =
         if decrypt? do
-          decrypt_sm4(input, key, mode, iv, padding, input_hex?)
+          decrypt_sm4(input, key, mode, iv_or_counter, padding, input_hex?)
         else
-          encrypt_sm4(input, key, mode, iv, padding, input_hex?)
+          encrypt_sm4(input, key, mode, iv_or_counter, padding, input_hex?)
         end
 
       case result do
@@ -142,6 +165,11 @@ defmodule Guomi.CLI do
     Guomi.SM4.encrypt_cbc(input, key, iv, padding: padding)
   end
 
+  defp encrypt_sm4(input, key, "ctr", counter, :none, input_hex?) do
+    input = if input_hex?, do: parse_hex_or_exit(input, "plaintext"), else: input
+    Guomi.SM4.encrypt_ctr(input, key, counter)
+  end
+
   defp encrypt_sm4(_input, _key, mode, _iv, _padding, _input_hex?) do
     {:error, {:invalid_mode, mode}}
   end
@@ -156,6 +184,11 @@ defmodule Guomi.CLI do
     Guomi.SM4.decrypt_cbc(ciphertext, key, iv, padding: padding)
   end
 
+  defp decrypt_sm4(input, key, "ctr", counter, :none, hex_input) do
+    ciphertext = if hex_input, do: parse_hex_or_exit(input, "ciphertext"), else: input
+    Guomi.SM4.decrypt_ctr(ciphertext, key, counter)
+  end
+
   defp decrypt_sm4(_input, _key, mode, _iv, _padding, _hex) do
     {:error, {:invalid_mode, mode}}
   end
@@ -166,7 +199,7 @@ defmodule Guomi.CLI do
   end
 
   defp handle_sm2(args) do
-    {opts, remaining, _} =
+    {opts, remaining, invalid} =
       OptionParser.parse(args,
         strict: [
           generate: :boolean,
@@ -177,13 +210,21 @@ defmodule Guomi.CLI do
           public_key: :string,
           private_key: :string,
           message: :string,
+          file: :string,
           signature: :string,
           ciphertext: :string,
-          hex: :boolean,
           help: :boolean
         ]
       )
 
+    if invalid != [] do
+      fail("Unknown or invalid SM2 option: #{format_invalid_options(invalid)}")
+    else
+      handle_parsed_sm2(opts, remaining)
+    end
+  end
+
+  defp handle_parsed_sm2(opts, remaining) do
     if opts[:help] do
       print_sm2_help()
     else
@@ -272,18 +313,15 @@ defmodule Guomi.CLI do
 
   defp do_decrypt(args, opts) do
     ciphertext =
-      case {opts[:ciphertext], args} do
-        {nil, [file]} when file not in ["-", "--"] ->
-          File.read!(file)
-
-        {nil, []} ->
-          required_hex_or_exit(nil, "ciphertext")
-
-        {ciph, _} when is_binary(ciph) ->
+      case {opts[:ciphertext], opts[:file], args} do
+        {ciph, _file, _args} when is_binary(ciph) ->
           ciph
 
-        _ ->
-          IO.read(:stdio, :eof)
+        {nil, nil, []} ->
+          required_hex_or_exit(nil, "ciphertext")
+
+        {nil, _file, _args} ->
+          read_input(args, opts)
       end
 
     ciphertext = parse_hex_or_exit(ciphertext, "ciphertext")
@@ -304,17 +342,33 @@ defmodule Guomi.CLI do
         msg
 
       _ ->
-        read_input(args)
+        read_input(args, opts)
     end
   end
 
   defp read_input([]), do: IO.read(:stdio, :eof)
-  defp read_input([file]) when file in ["-", "--"], do: IO.read(:stdio, :eof)
-  defp read_input([file]), do: File.read!(file)
-  defp read_input(args), do: Enum.join(args, " ")
+
+  defp read_input(args, opts) do
+    case {opts[:file], args} do
+      {nil, []} -> IO.read(:stdio, :eof)
+      {nil, [source]} when source in ["-", "--"] -> IO.read(:stdio, :eof)
+      {nil, values} -> Enum.join(values, " ")
+      {source, []} when source in ["-", "--"] -> IO.read(:stdio, :eof)
+      {path, []} -> File.read!(path)
+      {_path, _values} -> fail("Use either --file or positional input, not both")
+    end
+  end
 
   defp write_output(output, true), do: IO.puts(Base.encode16(output, case: :lower))
   defp write_output(output, false), do: IO.write(output)
+
+  defp format_invalid_options(options) do
+    options
+    |> Enum.map_join(", ", fn
+      {option, nil} -> option
+      {option, value} -> "#{option}=#{value}"
+    end)
+  end
 
   defp sm4_input_hex?(opts, hex?, decrypt?) do
     Keyword.get(opts, :input_hex, false) or (hex? and decrypt?)
@@ -355,6 +409,27 @@ defmodule Guomi.CLI do
   defp validate_sm4_iv("cbc", iv), do: parse_hex_or_exit(iv, "iv")
   defp validate_sm4_iv(_mode, _iv), do: nil
 
+  defp validate_sm4_parameter("cbc", opts), do: validate_sm4_iv("cbc", opts[:iv])
+
+  defp validate_sm4_parameter("ctr", opts) do
+    opts[:counter]
+    |> required_hex_or_exit("counter")
+    |> validate_sm4_counter()
+  end
+
+  defp validate_sm4_parameter(_mode, _opts), do: nil
+
+  defp validate_sm4_counter(counter) when byte_size(counter) == 16, do: counter
+  defp validate_sm4_counter(_counter), do: fail("Invalid counter size (must be 16 bytes)")
+
+  defp parse_sm4_padding("ctr", opts) do
+    if opts[:padding], do: fail("SM4 CTR does not use padding"), else: :none
+  end
+
+  defp parse_sm4_padding(_mode, opts) do
+    parse_padding_or_exit(Keyword.get(opts, :padding, "pkcs7"))
+  end
+
   defp parse_padding_or_exit("pkcs7"), do: :pkcs7
   defp parse_padding_or_exit("none"), do: :none
 
@@ -374,10 +449,12 @@ defmodule Guomi.CLI do
   defp format_sm4_error(:invalid_block_size), do: "Invalid block size"
   defp format_sm4_error(:invalid_padding), do: "Invalid padding option"
   defp format_sm4_error(:unsupported), do: "SM4 is not supported on this system"
-  defp format_sm4_error({:invalid_mode, mode}), do: "Invalid mode: #{mode} (use 'ecb' or 'cbc')"
+  defp format_sm4_error({:invalid_mode, mode}),
+    do: "Invalid mode: #{mode} (use 'ecb', 'cbc', or 'ctr')"
   defp format_sm4_error(_), do: "Unknown error"
 
   defp format_sm2_error(:decryption_failed), do: "Decryption failed"
+  defp format_sm2_error(:invalid_input), do: "Invalid message input"
   defp format_sm2_error(:invalid_ciphertext), do: "Invalid ciphertext"
   defp format_sm2_error(:invalid_key), do: "Invalid key"
   defp format_sm2_error(:invalid_signature), do: "Invalid signature"
@@ -404,7 +481,7 @@ defmodule Guomi.CLI do
     EXAMPLES:
         # SM3 hash
         echo -n "hello" | guomi sm3
-        guomi sm3 --hex file.txt
+        guomi sm3 --hex --file file.txt
 
         # SM4 encryption
         echo "secret" | guomi sm4 --key 0123456789abcdef0123456789abcdef
@@ -417,7 +494,7 @@ defmodule Guomi.CLI do
         echo "message" | guomi sm2 --sign --private-key <hex-key>
 
         # SM2 verify
-        guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
+        guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> --file message.txt
     """)
   end
 
@@ -430,17 +507,18 @@ defmodule Guomi.CLI do
 
     OPTIONS:
         --hex         Output hash as hexadecimal (default: binary)
+        --file <path> Read input from a file (use - for stdin)
         --help        Show this help message
 
     INPUT:
         If no input is specified, reads from stdin.
-        A single argument is always treated as a file path.
-        Multiple arguments are joined with spaces and treated as the message.
+        Positional arguments are joined with spaces and treated as the message.
+        Use --file <path> to read from a file, or - to read from stdin.
 
     EXAMPLES:
         echo -n "hello" | guomi sm3
         guomi sm3 --hex hello world
-        guomi sm3 --hex file.txt
+        guomi sm3 --hex --file file.txt
     """)
   end
 
@@ -452,20 +530,22 @@ defmodule Guomi.CLI do
         guomi sm4 [options] [input]
 
     OPTIONS:
-        --mode <mode>     Encryption mode: ecb (default) or cbc
+        --mode <mode>     Encryption mode: ecb (default), cbc, or ctr
         --key <hex>       Encryption key (16 bytes hex, required)
         --iv <hex>        Initialization vector (16 bytes hex, required for CBC)
+        --counter <hex>   Initial counter (16 bytes hex, required for CTR)
         --decrypt         Decrypt instead of encrypt
         --hex             Compatibility shortcut: output hex when encrypting, input hex when decrypting
         --input-hex       Treat input as hexadecimal text
         --output-hex      Print output as hexadecimal text
         --padding <pad>   Padding: pkcs7 (default) or none
+        --file <path>     Read input from a file (use - for stdin)
         --help            Show this help message
 
     INPUT:
         If no input is specified, reads from stdin.
-        A single argument is treated as a file path.
-        Multiple arguments are joined with spaces and treated as the input.
+        Positional arguments are joined with spaces and treated as the input.
+        Use --file <path> to read from a file, or - to read from stdin.
 
     EXAMPLES:
         # Encrypt with ECB
@@ -479,6 +559,9 @@ defmodule Guomi.CLI do
 
         # Decrypt CBC mode
         guomi sm4 --decrypt --mode cbc --key 0123456789abcdef0123456789abcdef --iv 00000000000000000000000000000000 < ciphertext.bin
+
+        # Encrypt with CTR (the key/counter pair must never be reused)
+        guomi sm4 --mode ctr --key 0123456789abcdef0123456789abcdef --counter 00000000000000000000000000000001 secret
     """)
   end
 
@@ -498,15 +581,15 @@ defmodule Guomi.CLI do
         --public-key <hex>  Public key (hex encoded)
         --private-key <hex> Private key (hex encoded)
         --message <msg>     Message to sign/verify/encrypt
+        --file <path>       Read message/ciphertext from a file (use - for stdin)
         --signature <hex>   Signature to verify (hex encoded)
         --ciphertext <hex>  Ciphertext to decrypt (hex encoded)
-        --hex             Reserved compatibility option; key/signature/ciphertext output is already hex
         --help            Show this help message
 
     INPUT:
         If no input is specified, reads from stdin.
-        A single argument is treated as a file path.
-        Multiple arguments are joined with spaces and treated as the message.
+        Positional arguments are joined with spaces and treated as the message.
+        Use --file <path> to read from a file, or - to read from stdin.
         --message takes precedence for sign, verify, and encrypt operations.
 
     EXAMPLES:
@@ -517,7 +600,7 @@ defmodule Guomi.CLI do
         echo "message" | guomi sm2 --sign --private-key <hex-key>
 
         # Verify a signature
-        guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
+        guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> --file message.txt
 
         # Encrypt a message
         echo "secret" | guomi sm2 --encrypt --public-key <hex-key>

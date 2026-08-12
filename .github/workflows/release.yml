@@ -16,6 +16,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          mix_version="$(sed -n 's/.*@version "\([^"]*\)".*/\1/p' mix.exs)"
+
+          if [ -z "$mix_version" ] || [ "$tag_version" != "$mix_version" ]; then
+            echo "Release tag version '$tag_version' does not match mix.exs version '$mix_version'." >&2
+            exit 1
+          fi
       
       - name: Set up Erlang/OTP and Elixir
         uses: erlef/setup-beam@v1

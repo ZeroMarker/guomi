@@ -10,10 +10,27 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Added `bench/bench.exs` micro-benchmark for the pure-Elixir SM2, SM3, and SM4 cores.
+- Benchmark output now records runtime/OS/architecture parameters and reports
+  min/median/max across repeated samples.
 - Added large-input SM4 CTR coverage and fixed SM2 scalar-multiplication vectors.
+- Added explicit standard SM2 APIs for ZA-aware raw signatures and C1/C3/C2
+  encryption using the counter-based SM3 KDF; legacy APIs retain their format.
 
 ### Changed
 
+- CI now verifies the documented minimum Elixir 1.14/OTP 24 toolchain in addition
+  to the current cross-platform toolchain.
+- Release jobs now reject tags whose version does not match `mix.exs`.
+- Removed the reserved, behaviorless SM2 CLI `--hex` option; SM2 keys,
+  signatures, and ciphertext remain hex-encoded where documented.
+- Added public API documentation for SM2, SM3, and SM4, and report malformed
+  SM2 message iodata as `:invalid_input` instead of `:invalid_key`.
+- CLI positional arguments now consistently mean message text; file input uses
+  the explicit `--file <path>` option for SM2, SM3, and SM4.
+- Added SM4-CTR CLI encryption/decryption with an explicit required 16-byte
+  `--counter`; padding options are rejected in CTR mode.
+- Added doctests for the documented facade and SM3 examples; CLI examples remain
+  covered by subprocess integration tests.
 - Optimized SM3 compression with a rolling 16-word message schedule,
   precomputed round constants, and specialized rotations.
 - Optimized SM2 scalar multiplication with Jacobian coordinates and mixed
@@ -25,6 +42,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Documentation
 
+- Added an implementation-oriented SM2 standards and migration design covering
+  ZA/user IDs, signature encoding, KDF, ciphertext layout, and legacy handling.
+- Added a security policy covering SM2 migration, SM4 integrity composition,
+  key/randomness handling, side-channel limits, and unsupported use cases.
+- Documented reproducible benchmark comparison rules and scoped future streaming,
+  certificate parsing, and SM9 work with explicit implementation prerequisites.
 - Corrected the README SM3 CLI example and removed unverified performance claims.
 - Clarified API return values, binary formats, SM2 interoperability limits, and
   SM2 long-message confidentiality limits and SM4 confidentiality-only mode caveats.

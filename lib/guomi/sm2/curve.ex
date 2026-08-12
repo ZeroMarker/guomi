@@ -206,9 +206,16 @@ defmodule Guomi.SM2.Curve do
   end
 
   def shared_secret(private_key, public_point) do
+    case shared_point(private_key, public_point) do
+      {:ok, {sx, _sy}} -> {:ok, sx}
+      {:error, _} = error -> error
+    end
+  end
+
+  def shared_point(private_key, public_point) do
     case mul(public_point, private_key) do
       :infinity -> {:error, :decryption_failed}
-      {sx, _sy} -> {:ok, sx}
+      {_sx, _sy} = point -> {:ok, point}
     end
   end
 

@@ -15,9 +15,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        otp: ['27']
-        elixir: ['1.18']
+        include:
+          # Minimum versions declared in README.md and mix.exs.
+          - os: ubuntu-latest
+            otp: '24.3'
+            elixir: '1.14.5'
+          # Current primary toolchain on every supported runner.
+          - os: ubuntu-latest
+            otp: '27'
+            elixir: '1.18'
+          - os: windows-latest
+            otp: '27'
+            elixir: '1.18'
+          - os: macos-latest
+            otp: '27'
+            elixir: '1.18'
     
     steps:
       - name: Preserve LF line endings
@@ -39,9 +51,9 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-mix-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-mix-
       
       - name: Install Hex and Rebar
         run: |

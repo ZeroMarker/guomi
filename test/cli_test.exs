@@ -12,7 +12,7 @@ defmodule Guomi.CLITest do
           Path.join(System.tmp_dir!(), "guomi-cli-#{System.unique_integer([:positive])}")
 
         File.write!(input_path, input)
-        {args ++ [input_path], input_path}
+        {args ++ ["--file", input_path], input_path}
       else
         {args, nil}
       end
@@ -56,6 +56,19 @@ defmodule Guomi.CLITest do
     end
   end
 
+  test "sm3 treats a single positional argument as message text" do
+    {output, 0} = run_cli(["sm3", "--hex", "abc"])
+
+    assert String.trim(output) ==
+             "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+  end
+
+  test "input rejects combining --file with positional text" do
+    {output, status} = run_cli(["sm3", "--hex", "--file", "some-file", "text"])
+    assert status != 0
+    assert output =~ "Use either --file or positional input, not both"
+  end
+
   test "sm3 handles empty input" do
     if Guomi.SM3.supported?() do
       {output, 0} = run_cli(["sm3", "--hex"], "")
@@ -70,9 +83,9 @@ defmodule Guomi.CLITest do
   end
 
   test "sm4 reports invalid mode" do
-    {output, status} = run_cli(["sm4", "--key", @key, "--mode", "ctr"], "secret")
+    {output, status} = run_cli(["sm4", "--key", @key, "--mode", "gcm"], "secret")
     assert status != 0
-    assert output =~ "Invalid mode: ctr"
+    assert output =~ "Invalid mode: gcm"
   end
 
   test "sm4 reports invalid hex ciphertext" do
@@ -85,6 +98,12 @@ defmodule Guomi.CLITest do
     {output, status} = run_cli(["sm2", "--decrypt"])
     assert status != 0
     assert output =~ "Missing required option --ciphertext"
+  end
+
+  test "sm2 rejects the removed --hex option" do
+    {output, status} = run_cli(["sm2", "--hex", "--generate"])
+    assert status != 0
+    assert output =~ "Unknown or invalid SM2 option: --hex"
   end
 
   test "sm4 encrypts to hex and decrypts hex ciphertext" do
@@ -137,6 +156,36 @@ defmodule Guomi.CLITest do
     {output, status} = run_cli(["sm4", "--key", @key, "--mode", "cbc"], "secret")
     assert status != 0
     assert output =~ "Missing required option --iv"
+  end
+
+  test "sm4 ctr mode encrypts and decrypts arbitrary-length input" do
+    counter = "00112233445566778899aabbccddeeff"
+
+    {ciphertext, 0} =
+      run_cli(["sm4", "--mode", "ctr", "--counter", counter, "--key", @key, "--hex"], "secret")
+
+    {plaintext, 0} =
+      run_cli(
+        ["sm4", "--decrypt", "--mode", "ctr", "--counter", counter, "--key", @key, "--hex"],
+        String.trim(ciphertext)
+      )
+
+    assert plaintext == "secret"
+  end
+
+  test "sm4 ctr mode requires a 16-byte counter and rejects padding" do
+    {missing_output, missing_status} = run_cli(["sm4", "--mode", "ctr", "--key", @key], "secret")
+    assert missing_status != 0
+    assert missing_output =~ "Missing required option --counter"
+
+    {padding_output, padding_status} =
+      run_cli(
+        ["sm4", "--mode", "ctr", "--counter", String.duplicate("00", 16), "--key", @key, "--padding", "none"],
+        "secret"
+      )
+
+    assert padding_status != 0
+    assert padding_output =~ "SM4 CTR does not use padding"
   end
 
   test "unknown command reports error" do

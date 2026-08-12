@@ -20,11 +20,12 @@ guomi <command> [options] [input]
 
 - 未提供 `[input]` 时，从标准输入读取。
 - `[input]` 为 `-` 或 `--` 时，从标准输入读取。
-- 只提供一个普通参数时，该参数按文件路径读取。
-- 提供多个普通参数时，参数以空格连接后作为消息内容。
+- 一个或多个普通参数均以空格连接后作为消息内容。
+- 使用 `--file <path>` 显式读取文件；`--file -` 从标准输入读取。
+- `--file` 与普通位置参数不能同时使用。
 - SM2 的 `--message` 优先于上述输入来源。
 
-因此，直接处理短文本时推荐使用 stdin 或 `--message`；例如 `echo -n "hello" | guomi sm3 --hex`。
+因此 `guomi sm3 --hex hello` 会直接计算文本 `hello`，不会尝试打开同名文件。
 
 ## 命令一览
 
@@ -51,11 +52,12 @@ guomi sm3 [options] [input]
 | 选项 | 说明 |
 |------|------|
 | `--hex` | 十六进制输出（默认输出原始二进制） |
+| `--file <path>` | 从文件读取输入；使用 `-` 表示 stdin |
 | `--help` | 显示帮助信息 |
 
 ### 输入来源
 
-SM3 遵循[全局输入解析规则](#输入解析规则)。单个普通参数会被当作文件路径。
+SM3 遵循[全局输入解析规则](#输入解析规则)。
 
 ### 示例
 
@@ -68,7 +70,7 @@ echo -n "hello" | guomi sm3 --hex
 guomi sm3 --hex hello world
 
 # 从文件读取
-guomi sm3 --hex document.txt
+guomi sm3 --hex --file document.txt
 
 # 输出原始二进制（默认）
 echo -n "hello" | guomi sm3
@@ -97,14 +99,16 @@ guomi sm4 [options] [input]
 
 | 选项 | 说明 |
 |------|------|
-| `--mode <ecb\|cbc>` | 加密模式，默认 `ecb`；CLI 当前不提供 CTR |
+| `--mode <ecb\|cbc\|ctr>` | 加密模式，默认 `ecb` |
 | `--key <hex>` | **必填**。16 字节密钥，十六进制编码 |
 | `--iv <hex>` | CBC 模式必填。16 字节初始向量，十六进制编码 |
+| `--counter <hex>` | CTR 模式必填。16 字节大端初始计数器，十六进制编码 |
 | `--decrypt` | 解密模式（默认加密） |
 | `--hex` | 快捷方式：加密时输出 hex，解密时输入为 hex |
 | `--input-hex` | 输入视为十六进制文本 |
 | `--output-hex` | 输出为十六进制文本 |
 | `--padding <pkcs7\|none>` | 填充方式，默认 `pkcs7` |
+| `--file <path>` | 从文件读取输入；使用 `-` 表示 stdin |
 | `--help` | 显示帮助信息 |
 
 ### 安全提示
@@ -113,6 +117,7 @@ guomi sm4 [options] [input]
 - **CBC 模式**必须为每次加密使用**不可预测且不复用**的 16 字节 IV
 - 同一密钥下 IV 复用会完全破坏机密性
 - ECB/CBC 均不提供消息认证；应用层需要单独保证完整性
+- CTR 的同一 key/counter 组合不得复用；CTR 不使用 padding，也不提供消息认证
 
 ### 示例
 
@@ -151,6 +156,11 @@ echo -n "736563726574" | guomi sm4 \
 echo -n "abcdefghijklmnop" | guomi sm4 \
   --key 0123456789abcdef0123456789abcdef \
   --padding none
+
+# CTR（任意长度；不要复用相同的 key/counter）
+echo -n "secret" | guomi sm4 --mode ctr --output-hex \
+  --key 0123456789abcdef0123456789abcdef \
+  --counter 00112233445566778899aabbccddeeff
 ```
 
 ---
@@ -175,9 +185,9 @@ guomi sm2 [options] [input]
 | `--private-key <hex>` | 私钥（32 字节，十六进制） |
 | `--public-key <hex>` | 公钥（65 字节，04 前缀 + 32 字节 x + 32 字节 y，十六进制） |
 | `--message <msg>` | 待签名/验签/加密的消息文本 |
+| `--file <path>` | 从文件读取消息或密文；使用 `-` 表示 stdin |
 | `--signature <hex>` | 签名值（64 字节 raw r \|\| s，十六进制，仅验签） |
 | `--ciphertext <hex>` | 密文（十六进制，仅解密） |
-| `--hex` | 当前 SM2 子命令保留选项；密钥、签名和密文输出本身始终为 hex |
 | `--help` | 显示帮助信息 |
 
 ### 兼容性说明
@@ -185,6 +195,7 @@ guomi sm2 [options] [input]
 - 签名算法使用 SM3 预哈希 + raw 64 字节 `r || s` 格式，未暴露用户 ID/ZA 参数
 - 加密使用 Guomi 内部 `C1 || C2 || C3` 格式（C1=65 字节临时公钥, C3=32 字节 SM3 MAC）。当前实现对超过 32 字节的消息重复 XOR 掩码，会泄露相隔 32 字节的明文 XOR 关系；仅用于兼容和测试，不得用于敏感数据或生产协议
 - **不应假定可与 OpenSSL 或其他 SM2 实现互通**
+- 标准 ZA 签名和 `C1 || C3 || C2` 加密目前仅通过库 API 提供；CLI 保持旧兼容行为，避免无提示改变已有脚本
 
 ### 示例
 
@@ -213,7 +224,7 @@ guomi sm2 --verify \
 guomi sm2 --verify \
   --public-key <hex-pubkey> \
   --signature <hex-signature> \
-  message.txt
+  --file message.txt
 
 # 加密
 echo "secret message" | guomi sm2 --encrypt --public-key <hex-pubkey>
@@ -226,7 +237,7 @@ guomi sm2 --decrypt \
 # 解密（文件内容必须是 hex 文本）
 guomi sm2 --decrypt \
   --private-key <hex-privkey> \
-  ciphertext.hex
+  --file ciphertext.hex
 ```
 
 ---

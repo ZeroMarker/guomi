@@ -1,6 +1,14 @@
 defmodule Guomi do
   @moduledoc """
   Guomi algorithms facade.
+
+  ## Examples
+
+      iex> Guomi.algorithms()
+      [:sm2, :sm3, :sm4]
+
+      iex> Guomi.supported()
+      %{sm2: true, sm3: true, sm4: true}
   """
 
   @type algorithm :: :sm2 | :sm3 | :sm4
