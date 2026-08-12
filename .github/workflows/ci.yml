@@ -14,6 +14,7 @@ jobs:
     name: Test
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           # Minimum versions declared in README.md and mix.exs.
@@ -64,6 +65,7 @@ jobs:
         run: mix deps.get
       
       - name: Check formatting
+        if: matrix.os == 'ubuntu-latest' && matrix.elixir == '1.18'
         run: mix format --check-formatted
       
       - name: Compile with warnings as errors
