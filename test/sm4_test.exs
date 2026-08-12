@@ -168,6 +168,18 @@ defmodule Guomi.SM4Test do
         assert decrypted == plaintext
       end)
     end
+
+    test "handles large non-block-aligned data in CTR mode" do
+      with_sm4_supported(fn ->
+        counter = <<0::128>>
+        plaintext = :binary.copy(<<0, 1, 2, 3, 4, 5, 6, 7>>, 8_193) <> <<8>>
+
+        assert {:ok, encrypted} = Guomi.SM4.encrypt_ctr(plaintext, @key, counter)
+        assert byte_size(encrypted) == byte_size(plaintext)
+        assert {:ok, decrypted} = Guomi.SM4.decrypt_ctr(encrypted, @key, counter)
+        assert decrypted == plaintext
+      end)
+    end
   end
 
   describe "binary data" do

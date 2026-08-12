@@ -20,6 +20,10 @@ jobs:
         elixir: ['1.18']
     
     steps:
+      - name: Preserve LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@v4
       
