@@ -332,7 +332,8 @@ defmodule Guomi.SM2 do
       {:ok, key} ->
         if key < Curve.n() - 1, do: {:ok, key}, else: {:error, :invalid_key}
 
-      _ -> {:error, :invalid_key}
+      _ ->
+        {:error, :invalid_key}
     end
   end
 

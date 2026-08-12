@@ -94,17 +94,21 @@ defmodule Guomi.OpenSSLCompatTest do
     do: {:skip, missing_reason}
 
   defp sm2_private_pem(private_key, public_key) do
+    oid_ec_public_key = <<0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01>>
     oid_sm2 = <<0x06, 0x08, 0x2A, 0x81, 0x1C, 0xCF, 0x55, 0x01, 0x82, 0x2D>>
 
-    body =
+    ec_private_key =
       <<0x02, 0x01, 0x01, 0x04, 0x20>> <>
         private_key <>
-        <<0xA0, byte_size(oid_sm2)>> <>
-        oid_sm2 <>
         <<0xA1, 68, 0x03, 66, 0x00>> <>
         public_key
 
-    der = <<0x30, byte_size(body)>> <> body
+    algorithm = der_wrap(0x30, oid_ec_public_key <> oid_sm2)
+    private_key_info =
+      <<0x02, 0x01, 0x00>> <>
+        algorithm <>
+        der_wrap(0x04, der_wrap(0x30, ec_private_key))
+    der = der_wrap(0x30, private_key_info)
 
     encoded =
       der
@@ -113,7 +117,7 @@ defmodule Guomi.OpenSSLCompatTest do
       |> Enum.chunk_every(64)
       |> Enum.map_join("\n", &Enum.join/1)
 
-    "-----BEGIN EC PRIVATE KEY-----\n#{encoded}\n-----END EC PRIVATE KEY-----\n"
+    "-----BEGIN PRIVATE KEY-----\n#{encoded}\n-----END PRIVATE KEY-----\n"
   end
 
   defp raw_signature_to_der(<<r::binary-size(32), s::binary-size(32)>>) do
