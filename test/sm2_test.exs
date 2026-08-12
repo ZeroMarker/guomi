@@ -283,8 +283,10 @@ defmodule Guomi.SM2Test do
     test "standard KDF does not repeat a 32-byte mask block" do
       assert {:ok, _private_key, public_key} = SM2.generate_keypair()
       plaintext = :binary.copy(<<0>>, 64)
+
       assert {:ok, <<_c1::binary-size(65), _c3::binary-size(32), c2::binary>>} =
                SM2.encrypt_standard(plaintext, public_key)
+
       <<first::binary-size(32), second::binary-size(32)>> = c2
       refute first == second
     end

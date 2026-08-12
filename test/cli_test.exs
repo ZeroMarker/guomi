@@ -180,7 +180,17 @@ defmodule Guomi.CLITest do
 
     {padding_output, padding_status} =
       run_cli(
-        ["sm4", "--mode", "ctr", "--counter", String.duplicate("00", 16), "--key", @key, "--padding", "none"],
+        [
+          "sm4",
+          "--mode",
+          "ctr",
+          "--counter",
+          String.duplicate("00", 16),
+          "--key",
+          @key,
+          "--padding",
+          "none"
+        ],
         "secret"
       )
 

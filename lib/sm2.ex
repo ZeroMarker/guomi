@@ -264,8 +264,8 @@ defmodule Guomi.SM2 do
     Guomi.SM3.hash(
       <<entl::16-big>> <>
         user_id <>
-        <<curve_a::256-big, curve_b::256-big, generator_x::256-big,
-          generator_y::256-big, public_x::256-big, public_y::256-big>>
+        <<curve_a::256-big, curve_b::256-big, generator_x::256-big, generator_y::256-big,
+          public_x::256-big, public_y::256-big>>
     )
   end
 
@@ -307,9 +307,7 @@ defmodule Guomi.SM2 do
   defp do_zero_binary?(<<0, rest::binary>>), do: do_zero_binary?(rest)
   defp do_zero_binary?(_data), do: false
 
-  defp split_standard_ciphertext(
-         <<c1::binary-size(65), c3::binary-size(32), c2::binary>>
-       )
+  defp split_standard_ciphertext(<<c1::binary-size(65), c3::binary-size(32), c2::binary>>)
        when byte_size(c2) > 0,
        do: {:ok, c1, c3, c2}
 
@@ -331,7 +329,9 @@ defmodule Guomi.SM2 do
   # Signing additionally excludes n - 1 because (1 + d) has no inverse mod n.
   defp decode_signing_private_key(private_key) do
     case decode_private_key(private_key) do
-      {:ok, key} when key < Curve.n() - 1 -> {:ok, key}
+      {:ok, key} ->
+        if key < Curve.n() - 1, do: {:ok, key}, else: {:error, :invalid_key}
+
       _ -> {:error, :invalid_key}
     end
   end

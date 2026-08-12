@@ -449,8 +449,10 @@ defmodule Guomi.CLI do
   defp format_sm4_error(:invalid_block_size), do: "Invalid block size"
   defp format_sm4_error(:invalid_padding), do: "Invalid padding option"
   defp format_sm4_error(:unsupported), do: "SM4 is not supported on this system"
+
   defp format_sm4_error({:invalid_mode, mode}),
     do: "Invalid mode: #{mode} (use 'ecb', 'cbc', or 'ctr')"
+
   defp format_sm4_error(_), do: "Unknown error"
 
   defp format_sm2_error(:decryption_failed), do: "Decryption failed"

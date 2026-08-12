@@ -176,6 +176,7 @@ defmodule Guomi.OpenSSLCompatTest do
   defp trim_zeroes(value), do: value
 
   defp pad_integer(<<0, rest::binary>>) when byte_size(rest) == 32, do: rest
+
   defp pad_integer(value) when byte_size(value) <= 32 do
     :binary.copy(<<0>>, 32 - byte_size(value)) <> value
   end
