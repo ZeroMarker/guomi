@@ -1,6 +1,16 @@
-# SM2 标准兼容与迁移设计
+# SM2 标准兼容与迁移指南
 
-本文定义 Guomi 从内部兼容 SM2 构造迁移到标准 SM2 签名和加密接口的边界。本文是实现约束，不代表尚未落地的 API 已可使用。
+本文说明 Guomi 从内部兼容 SM2 构造迁移到标准 SM2 签名和加密接口的边界、已实现 API 与调用方迁移方法。
+
+## 当前状态
+
+标准接口已经实现，并通过 GB/T 32918.5 公开向量和 OpenSSL 双向互操作测试：
+
+- `sign_standard/3`、`verify_standard/4` 和 `user_identity_digest/2` 提供显式用户 ID/ZA 的标准签名流程。
+- `encrypt_standard/2`、`decrypt_standard/2` 提供 SM3 KDF 与 `C1 || C3 || C2` 裸密文格式。
+- 旧 `sign/2`、`verify/3`、`encrypt/2`、`decrypt/2` 保留原有行为，仅用于兼容现有数据和调用方。
+
+这些验证不等同于独立安全审计。敏感或生产用途仍应遵守 [SECURITY.md](SECURITY.md) 中的限制。
 
 ## 目标与非目标
 
@@ -33,7 +43,7 @@
 
 ## 签名 API 决策
 
-现有 `sign/2` 和 `verify/3` 只处理 `SM3(message)`，继续作为旧兼容接口存在并标记弃用。标准接口使用不同名称，避免同一调用在升级后产生不同签名：
+现有 `sign/2` 和 `verify/3` 只处理 `SM3(message)`，继续作为旧兼容接口存在。标准接口使用不同名称，避免同一调用在升级后产生不同签名：
 
 ```elixir
 Guomi.SM2.sign_standard(message, private_key, user_id)
@@ -52,7 +62,7 @@ Guomi.SM2.user_identity_digest(user_id, public_key)
 
 ## 加密 API 与密文决策
 
-现有 `encrypt/2`、`decrypt/2` 继续只处理旧 Guomi `C1 || C2 || C3` 兼容格式，并标记弃用。标准接口使用不同名称：
+现有 `encrypt/2`、`decrypt/2` 继续只处理旧 Guomi `C1 || C2 || C3` 兼容格式。标准接口使用不同名称：
 
 ```elixir
 Guomi.SM2.encrypt_standard(plaintext, public_key)
@@ -78,13 +88,13 @@ Guomi.SM2.decrypt_standard(ciphertext, private_key)
 
 标准裸密文本身不添加私有前缀，以保留互操作能力。
 
-## 迁移步骤
+## 调用方迁移步骤
 
-1. 发布标准签名、ZA、标准加密和标准解密 API；旧 API 保持原行为。
-2. 使用官方向量验证 ZA/签名，使用独立实现完成签名和密文双向测试。
-3. 在一个次版本中将旧 API 标记 deprecated，并在文档中删除新用法示例。
-4. 调用方按数据来源选择显式解密入口，再将成功读取的旧密文重新加密为标准格式。
-5. 只有在一个主版本升级中才考虑删除旧加密入口；不得静默改变 `decrypt/2` 的格式。
+1. 新签名数据改用 `sign_standard/3`，并将业务协议选定的用户 ID 与签名一同管理；验签必须传入相同用户 ID。
+2. 新加密数据改用 `encrypt_standard/2`，并在应用层记录密文版本或来源，避免依赖内容猜测格式。
+3. 读取历史数据时仅对已知旧格式调用 `decrypt/2`，成功后使用 `encrypt_standard/2` 重新加密并更新版本标记。
+4. 迁移期间分别统计旧、新入口的使用量；不要在一个解密路径中自动尝试两种格式。
+5. 旧入口未来只能在主版本升级中考虑删除；不得静默改变 `sign/2` 或 `decrypt/2` 的语义。
 
 ## 测试与验收
 

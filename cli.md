@@ -297,4 +297,4 @@ set ELIXIR_ERL_OPTIONS=-noinput && guomi version
 | SM2 私钥 | 32 字节大端整数，hex 编码 |
 | SM2 公钥 | 65 字节未压缩点 `0x04 || x || y`，hex 编码 |
 | SM2 签名 | 64 字节 raw `r || s`，hex 编码 |
-| SM2 密文 | 内部 `C1 || C2 || C3` 格式，hex 编码 |
+| SM2 CLI 密文 | 旧兼容 `C1 || C2 || C3` 格式，hex 编码；标准 `C1 || C3 || C2` 仅通过库 API 提供 |

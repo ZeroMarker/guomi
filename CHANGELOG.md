@@ -39,6 +39,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   output assembly from repeated binary concatenation to linear-time collection.
 - Preserved LF line endings during Windows CI checkout so formatting checks are
   consistent across Ubuntu, macOS, and Windows.
+- CI now runs every compatibility job even when another matrix entry fails, and
+  runs the version-sensitive formatter check once on the primary toolchain.
+- OpenSSL interoperability tests now encode generated SM2 private keys as PKCS#8,
+  allowing current OpenSSL releases to import the fixtures consistently.
 
 ### Documentation
 
@@ -56,6 +60,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Synchronized README, standalone CLI documentation, and embedded CLI help;
   added current quality-check and micro-benchmark instructions.
 - Updated the Hex release guide and development roadmap.
+- Updated the SM2 migration guide to reflect the implemented standard APIs,
+  current interoperability coverage, and concrete caller migration steps.
 
 ## [0.5.1] - 2026-05-31
 
