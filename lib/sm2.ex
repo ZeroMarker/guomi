@@ -8,6 +8,10 @@ defmodule Guomi.SM2 do
   - Encryption/decryption (ECDH + SM3 KDF + XOR + SM3 MAC)
 
   This is a pure Elixir implementation with no external dependencies.
+
+  The encryption API uses a Guomi-specific compatibility format and repeats a
+  32-byte XOR mask for longer messages. It must not be used to protect
+  sensitive data or as part of a production protocol.
   """
 
   alias Guomi.SM2.Curve

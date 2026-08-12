@@ -16,6 +16,16 @@ mix escript.build
 guomi <command> [options] [input]
 ```
 
+### 输入解析规则
+
+- 未提供 `[input]` 时，从标准输入读取。
+- `[input]` 为 `-` 或 `--` 时，从标准输入读取。
+- 只提供一个普通参数时，该参数按文件路径读取。
+- 提供多个普通参数时，参数以空格连接后作为消息内容。
+- SM2 的 `--message` 优先于上述输入来源。
+
+因此，直接处理短文本时推荐使用 stdin 或 `--message`；例如 `echo -n "hello" | guomi sm3 --hex`。
+
 ## 命令一览
 
 | 命令 | 说明 |
@@ -43,12 +53,9 @@ guomi sm3 [options] [input]
 | `--hex` | 十六进制输出（默认输出原始二进制） |
 | `--help` | 显示帮助信息 |
 
-### 输入来源（优先级从高到低）
+### 输入来源
 
-1. `--message` 参数（仅 sign/verify/encrypt 命令）
-2. 命令行剩余参数（如 `guomi sm3 "hello"`）
-3. 文件路径参数（如 `guomi sm3 file.txt`）
-4. 标准输入 stdin（如 `echo "hello" \| guomi sm3`）
+SM3 遵循[全局输入解析规则](#输入解析规则)。单个普通参数会被当作文件路径。
 
 ### 示例
 
@@ -57,8 +64,8 @@ guomi sm3 [options] [input]
 echo -n "hello" | guomi sm3 --hex
 #=> becbbfaae6548b8bf0cfcad5a27183cd1be6093b1cceccc303d9c61d0a645268
 
-# 从参数读取
-guomi sm3 --hex "hello world"
+# 从多个参数读取消息
+guomi sm3 --hex hello world
 
 # 从文件读取
 guomi sm3 --hex document.txt
@@ -90,7 +97,7 @@ guomi sm4 [options] [input]
 
 | 选项 | 说明 |
 |------|------|
-| `--mode <ecb\|cbc>` | 加密模式，默认 `ecb` |
+| `--mode <ecb\|cbc>` | 加密模式，默认 `ecb`；CLI 当前不提供 CTR |
 | `--key <hex>` | **必填**。16 字节密钥，十六进制编码 |
 | `--iv <hex>` | CBC 模式必填。16 字节初始向量，十六进制编码 |
 | `--decrypt` | 解密模式（默认加密） |
@@ -105,6 +112,7 @@ guomi sm4 [options] [input]
 - **ECB 模式**只适合测试或兼容遗留系统，**不建议用于新数据加密**
 - **CBC 模式**必须为每次加密使用**不可预测且不复用**的 16 字节 IV
 - 同一密钥下 IV 复用会完全破坏机密性
+- ECB/CBC 均不提供消息认证；应用层需要单独保证完整性
 
 ### 示例
 
@@ -169,13 +177,13 @@ guomi sm2 [options] [input]
 | `--message <msg>` | 待签名/验签/加密的消息文本 |
 | `--signature <hex>` | 签名值（64 字节 raw r \|\| s，十六进制，仅验签） |
 | `--ciphertext <hex>` | 密文（十六进制，仅解密） |
-| `--hex` | 输出为十六进制 |
+| `--hex` | 当前 SM2 子命令保留选项；密钥、签名和密文输出本身始终为 hex |
 | `--help` | 显示帮助信息 |
 
 ### 兼容性说明
 
 - 签名算法使用 SM3 预哈希 + raw 64 字节 `r || s` 格式，未暴露用户 ID/ZA 参数
-- 加密使用 Guomi 内部 `C1 || C2 || C3` 格式（C1=65 字节临时公钥, C3=32 字节 SM3 MAC），适用于 Guomi 自身加解密往返
+- 加密使用 Guomi 内部 `C1 || C2 || C3` 格式（C1=65 字节临时公钥, C3=32 字节 SM3 MAC）。当前实现对超过 32 字节的消息重复 XOR 掩码，会泄露相隔 32 字节的明文 XOR 关系；仅用于兼容和测试，不得用于敏感数据或生产协议
 - **不应假定可与 OpenSSL 或其他 SM2 实现互通**
 
 ### 示例
@@ -215,10 +223,10 @@ guomi sm2 --decrypt \
   --private-key <hex-privkey> \
   --ciphertext <hex-ciphertext>
 
-# 解密（从文件读取密文）
+# 解密（文件内容必须是 hex 文本）
 guomi sm2 --decrypt \
   --private-key <hex-privkey> \
-  --ciphertext "$(cat ciphertext.hex)"
+  ciphertext.hex
 ```
 
 ---
@@ -266,3 +274,16 @@ set ELIXIR_ERL_OPTIONS=-noinput && guomi sm3 --hex "hello"
 | 输入错误/参数缺失 | 1 |
 | 验签失败（签名无效） | 1 |
 | SM2 不支持 | 1 |
+
+> 当前版本为纯 Elixir 实现，受支持运行时上的 `SM2 不支持` 分支不会在正常操作中出现。
+
+## 格式与兼容性速查
+
+| 数据 | 格式 |
+|------|------|
+| SM3 摘要 | 32 字节；`--hex` 时为 64 个小写十六进制字符 |
+| SM4 key / CBC IV | 16 字节，以 32 个十六进制字符传入 |
+| SM2 私钥 | 32 字节大端整数，hex 编码 |
+| SM2 公钥 | 65 字节未压缩点 `0x04 || x || y`，hex 编码 |
+| SM2 签名 | 64 字节 raw `r || s`，hex 编码 |
+| SM2 密文 | 内部 `C1 || C2 || C3` 格式，hex 编码 |

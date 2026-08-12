@@ -7,22 +7,30 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-### Changed
-
-- Optimized the pure-Elixir crypto cores (no API changes):
-  - SM3: replaced the per-block message-expansion Map with a rolling 16-word
-    window carried through the 64 rounds, precomputed T_j constants, and
-    shift-specialized rotations. Throughput roughly tripled (~5.9 MB/s for 1 MiB).
-  - SM2: scalar multiplication now uses Jacobian coordinates with a single
-    modular inversion per multiplication instead of one extended-Euclid per
-    point operation. Key generation/sign ~5x faster, verify/encrypt ~4x faster.
-  - SM4: the round transform L(tau(x)) is evaluated from a precomputed 256-entry
-    byte table instead of per-byte S-box lookups plus rotations. Throughput
-    roughly doubled (~9.7 MB/s for 1 MiB ECB).
-
 ### Added
 
-- Added `bench/bench.exs` micro-benchmark (`mix run bench/bench.exs`).
+- Added `bench/bench.exs` micro-benchmark for the pure-Elixir SM2, SM3, and SM4 cores.
+- Added large-input SM4 CTR coverage and fixed SM2 scalar-multiplication vectors.
+
+### Changed
+
+- Optimized SM3 compression with a rolling 16-word message schedule,
+  precomputed round constants, and specialized rotations.
+- Optimized SM2 scalar multiplication with Jacobian coordinates and mixed
+  addition, then optimized verification with joint scalar multiplication.
+- Optimized SM4 rounds with a precomputed transform table and changed CBC/CTR
+  output assembly from repeated binary concatenation to linear-time collection.
+- Preserved LF line endings during Windows CI checkout so formatting checks are
+  consistent across Ubuntu, macOS, and Windows.
+
+### Documentation
+
+- Corrected the README SM3 CLI example and removed unverified performance claims.
+- Clarified API return values, binary formats, SM2 interoperability limits, and
+  SM2 long-message confidentiality limits and SM4 confidentiality-only mode caveats.
+- Aligned CLI input parsing, SM2 output, and SM4 mode documentation with the
+  current implementation.
+- Updated the Hex release guide and development roadmap.
 
 ## [0.5.1] - 2026-05-31
 
@@ -63,11 +71,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Pure Elixir SM4 implementation — replaces the previous `:crypto.crypto_one_time`
   dependency. Full S-box lookup, key expansion, ECB and CBC modes, and PKCS#7
   padding are implemented in Elixir (GM/T 0002-2012).
-- Pure Elixir SM2 curve arithmetic (`Guomi.SM2.Curve`) — Jacobian projective
+- Pure Elixir internal SM2 curve arithmetic — Jacobian projective
   coordinate elliptic curve operations over the SM2 p256v1 curve, including point
   doubling, addition, scalar multiplication, modular inverse, ECDH shared secret,
   and ECDSA-compatible sign/verify primitives.
-- `Guomi.SM2.Curve` module with low-level SM2 elliptic curve operations.
+- Internal module with low-level SM2 elliptic curve operations.
 - Additional test coverage for block boundaries, padding edge cases, empty input,
   invalid key/ciphertext sizes, PKCS#7 padding validation, CBC mode with binary
   data, and CLI empty input handling.

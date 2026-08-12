@@ -1,274 +1,145 @@
-# Hex.pm 提交步骤
+# Hex.pm 发布维护指南
 
-本文档描述如何将 Guomi 包发布到 Hex.pm。
+本文面向 Guomi 维护者，说明当前仓库的版本发布、GitHub Release 与 Hex.pm 发布流程。
 
-## 前置准备
+## 当前发布方式
 
-### 1. 注册 Hex.pm 账号
+仓库使用 [`.github/workflows/release.yml`](.github/workflows/release.yml) 自动发布：
 
-访问 https://hex.pm 并注册账号。
+1. 推送与 `mix.exs` 版本一致、形如 `v0.5.2` 的 Git tag。
+2. workflow 在 Erlang/OTP 27 与 Elixir 1.18 上编译并运行测试。
+3. 测试通过后创建 GitHub Release。
+4. 使用仓库 secret `HEX_API_KEY` 构建并发布 Hex 包与文档。
 
-### 2. 安装 Hex 本地工具
-
-```bash
-mix local.hex
-```
-
-### 3. 认证 Hex 账号
-
-```bash
-mix hex.user auth
-```
-
-按提示输入用户名、邮箱和密码。
-
----
-
-## 配置 mix.exs
-
-确保 `mix.exs` 包含以下必要字段：
-
-### 必填字段
-
-```elixir
-def project do
-  [
-    app: :guomi,
-    version: "0.1.0",
-    description: "Guomi cryptographic algorithms for Elixir (SM2/SM3/SM4)",
-    package: package(),
-    deps: deps()
-  ]
-end
-```
-
-### package/0 函数
-
-```elixir
-defp package do
-  [
-    licenses: ["MIT"],
-    links: %{
-      "GitHub" => "https://github.com/your-username/guomi"
-    },
-    # 可选：指定包含的文件
-    files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
-  ]
-end
-```
-
-### 可选但推荐
-
-```elixir
-def project do
-  [
-    # ...
-    source_url: "https://github.com/your-username/guomi",
-    # 文档生成配置（使用 ex_doc）
-    name: "Guomi",
-    docs: &docs/0
-  ]
-end
-
-defp docs do
-  [
-    main: "readme",
-    extras: ["README.md"],
-    source_url: "https://github.com/your-username/guomi"
-  ]
-end
-```
-
----
+日常 push 与 pull request 的质量检查由 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 执行。
 
 ## 发布前检查
 
-### 1. 构建本地 tarball
+### 1. 更新版本和文档
 
-生成 `.tar` 包并查看包含的文件和元信息：
+- 在 `mix.exs` 中更新 `@version`。
+- 将 `CHANGELOG.md` 的 `[Unreleased]` 内容归入新版本，并填写发布日期。
+- 更新 README 中的安装版本和近期版本说明。
+- 确认公开文档与当前 API、CLI 行为一致。
 
-```bash
-mix hex.build
-```
-
-输出会显示所有将被打包的文件、版本、许可证、链接等信息。
-
-解压 tarball 检查内容：
-
-```bash
-tar -tf guomi-0.1.0.tar
-```
-
-### 2. 运行测试
-
-确保所有测试通过：
-
-```bash
-mix test
-```
-
-### 5. 检查依赖
-
-Hex.pm 不允许发布有未解析依赖的包：
+### 2. 运行质量检查
 
 ```bash
 mix deps.get
-mix deps.compile
-```
-
-### 6. 生成并检查文档
-
-```bash
+mix format --check-formatted
+mix compile --warnings-as-errors
+mix test
+mix credo --strict
 mix docs
+mix hex.build
 ```
 
-打开 `doc/index.html` 检查文档是否正确生成。
+`mix hex.build` 会显示包元数据与包含文件。当前包应包含：
 
----
+- `lib/`
+- `.formatter.exs`
+- `mix.exs`
+- `README.md`
+- `cli.md`
+- `CHANGELOG.md`
+- `todo.md`
+- `hex.pm.md`
+- `LICENSE`
 
-## 发布流程
-
-### 发布到 Hex.pm
+### 3. 检查发布状态
 
 ```bash
-mix hex.publish
-```
-
-### 发布包
-
-```bash
-mix hex.publish package 
-```
-
-### 仅发布文档
-
-```bash
-mix hex.publish docs
-```
-
-### 覆盖版本
-
-#### 时间窗口规则
-
-| 包的类型 | 可修改/撤销的时间窗口 |
-| :--- | :--- |
-| **首次发布的全新包** | 发布后 **24小时** 内  |
-| **已有包的新版本** | 发布后 **1小时** 内  |
-
-```sh
-mix hex.publish package --replace
-mix hex.publish --replace
-```
-
-### 撤销
-
-```sh
-mix hex.publish --revert 1.0.0
-```
-
----
-
-## 版本管理
-
-### 语义化版本 (SemVer)
-
-遵循 `MAJOR.MINOR.PATCH` 格式：
-
-- **MAJOR**: 不兼容的 API 变更
-- **MINOR**: 向后兼容的功能新增
-- **PATCH**: 向后兼容的 Bug 修复
-
-### 更新版本
-
-在 `mix.exs` 中更新 `version` 字段：
-
-```elixir
-version: "0.2.0"  # 从 0.1.0 升级
-```
-
-### 发布新版本
-
-```bash
-mix hex.publish
-```
-
----
-
-## 常见问题
-
-### 发布失败：版本已存在
-
-Hex.pm 不允许覆盖已发布的版本。需要：
-
-1. 增加版本号
-2. 重新发布
-
-### 发布失败：依赖问题
-
-确保所有依赖：
-- 也在 Hex.pm 上发布
-- 版本约束正确
-
-### 撤销发布
-
-仅在发布后 **1 小时内** 可以撤销：
-
-```bash
-mix hex.retract guomi 0.1.0
-```
-
-超过 1 小时需联系 Hex.pm 管理员。
-
-### 转移所有权
-
-添加其他维护者：
-
-```bash
-mix hex.owner add your-username
-```
-
----
-
-## 发布后验证
-
-### 1. 检查 Hex.pm 页面
-
-访问 https://hex.pm/packages/guomi 确认包已发布。
-
-### 2. 本地测试安装
-
-```bash
-mix hex.search guomi
-```
-
-或查看已发布的包信息：
-
-```bash
+git status --short
+git log -1 --oneline
 mix hex.info guomi
 ```
 
-### 3. 验证文档
+发布提交应已推送到 `main`，工作区应无意外改动。
 
-访问 https://hexdocs.pm/guomi 查看生成的文档。
+## 自动发布
 
----
+确认版本提交已在 `main` 后创建并推送 tag：
 
-## 最佳实践
+```bash
+git tag -a v0.5.2 -m "Release v0.5.2"
+git push origin v0.5.2
+```
 
-1. **CHANGELOG**: 维护变更日志，记录每个版本的改动
-2. **Git Tag**: 发布后打标签
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-3. **CI/CD**: 使用 GitHub Actions 等自动测试和发布
-4. **向后兼容**: 尽量避免破坏性变更，特别是在 1.0 之前
+随后在 GitHub Actions 中确认 Release workflow 的 `test`、`release` 和 `publish` 三个 job 均成功。
 
----
+> Tag 版本必须与 `mix.exs` 中的 `@version` 一致。workflow 不提供手动发布入口，也不会自动修改版本号。
 
-## 参考链接
+## 手动发布
 
-- [Hex.pm 官方文档](https://hex.pm/docs)
-- [Hex 使用指南](https://hex.pm/docs/using)
-- [发布包指南](https://hex.pm/docs/publish)
-- [语义化版本规范](https://semver.org/)
+仅在自动流程不可用且已确认版本内容时使用：
+
+```bash
+mix hex.user auth
+mix hex.build
+mix hex.publish --yes
+```
+
+也可分别发布：
+
+```bash
+mix hex.publish package --yes
+mix hex.publish docs --yes
+```
+
+CI 环境通过 `HEX_API_KEY` 认证，本地维护者通常通过 `mix hex.user auth` 认证。
+
+## 发布后验证
+
+1. 检查 [Hex 包页面](https://hex.pm/packages/guomi) 的最新版本和文件列表。
+2. 检查 [HexDocs](https://hexdocs.pm/guomi) 的 README、CLI 和模块文档。
+3. 检查 GitHub Release 的 tag、标题和自动生成的变更说明。
+4. 在临时项目中添加新版本依赖并运行一个 SM3/SM4 冒烟示例。
+
+```elixir
+def deps do
+  [{:guomi, "~> 0.5.2"}]
+end
+```
+
+## 撤回与替换
+
+Hex 对撤回和替换有时间限制，执行前应先查看当前 Hex 官方规则：
+
+```bash
+mix help hex.publish
+mix help hex.package
+```
+
+常用命令：
+
+```bash
+mix hex.publish package --replace
+mix hex.publish --revert 0.5.2
+```
+
+已被用户安装的错误版本不应静默覆盖。通常更稳妥的处理方式是发布新的补丁版本，并在 `CHANGELOG.md` 和 GitHub Release 中说明修复内容。
+
+## 发布故障排查
+
+### `HEX_API_KEY` 缺失或无效
+
+在 GitHub 仓库的 Actions secrets 中更新 `HEX_API_KEY`，然后重新运行失败的 publish job。
+
+### Tag 与包版本不一致
+
+不要移动已公开使用的 tag。修正 `mix.exs` 与变更日志后，创建新的版本提交和新 tag。
+
+### 文档未更新
+
+确认 `mix.exs` 的 `docs.extras` 与 `package.files` 包含目标文档，然后运行：
+
+```bash
+mix docs
+mix hex.publish docs --yes
+```
+
+## 参考
+
+- [Hex 发布指南](https://hex.pm/docs/publish)
+- [Hex 使用指南](https://hex.pm/docs/using-hex)
+- [Semantic Versioning](https://semver.org/)

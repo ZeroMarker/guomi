@@ -6,6 +6,16 @@
 
 国密算法纯 Elixir 实现（GM/T 0002-2012, GM/T 0003-2012, GM/T 0004-2012），无需外部依赖。
 
+> 当前 SM2 签名与加密接口有明确的兼容性限制，不应直接视为完整的跨实现标准 SM2 接口。详见[兼容性与安全边界](#兼容性与安全边界)。
+
+## 文档导航
+
+- [库 API 快速入门](#使用)
+- [命令行工具完整说明](cli.md)
+- [版本变更记录](CHANGELOG.md)
+- [开发路线图](todo.md)
+- [发布维护指南](hex.pm.md)
+
 ## 支持状态
 
 | 算法 | 状态 | 说明 |
@@ -30,6 +40,24 @@
 | SM4 CTR | 纯 Elixir 实现，16 字节初始计数器块按大端 128 位整数递增，不提供认证 |
 | SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算，SM3 预哈希，64 字节 raw `r || s` 签名 |
 | SM2 加密/解密 | 纯 Elixir ECDH + SM3 KDF + XOR + SM3 MAC，内部 `C1 || C2 || C3` 格式 |
+
+## API 约定
+
+- SM3 哈希函数直接返回二进制摘要或小写十六进制字符串。
+- SM2 与 SM4 操作返回 `{:ok, result}` 或 `{:error, reason}`，便于调用方显式处理错误。
+- SM2 私钥固定为 32 字节，公钥固定为 65 字节未压缩点格式 `0x04 || x || y`。
+- SM2 签名固定为 64 字节 raw `r || s` 格式。
+- SM4 密钥、CBC IV 和 CTR 初始计数器块均固定为 16 字节。
+
+可通过门面模块查询库暴露的算法：
+
+```elixir
+Guomi.algorithms()
+#=> [:sm2, :sm3, :sm4]
+
+Guomi.supported()
+#=> %{sm2: true, sm3: true, sm4: true}
+```
 
 ## 安装
 
@@ -137,6 +165,18 @@ Guomi.SM2.supported?()
 #=> true
 ```
 
+### 常见错误
+
+```elixir
+Guomi.SM4.encrypt("data", "short key")
+#=> {:error, :invalid_key_size}
+
+Guomi.SM2.verify("message", <<0>>, <<0>>)
+#=> {:error, :invalid_key}
+```
+
+SM2 可能返回 `:invalid_key`、`:invalid_signature`、`:invalid_ciphertext` 或 `:decryption_failed`。SM4 可能返回 `:invalid_key_size`、`:invalid_iv_size`、`:invalid_block_size` 或 `:invalid_padding`。
+
 ## CLI 工具
 
 Guomi 提供命令行工具，可直接执行国密算法操作。
@@ -163,7 +203,7 @@ mix escript.build
 ```bash
 # SM3 哈希
 echo -n "hello" | guomi sm3 --hex
-#=> 5897d5a782929dcdbf5e8fdb8e23d2781b5a1f5e8236e1c48e11c7b730a1e8f0
+#=> becbbfaae6548b8bf0cfcad5a27183cd1be6093b1cceccc303d9c61d0a645268
 
 # SM4 加密，输出 hex 密文
 echo "secret" | guomi sm4 --key 0123456789abcdef0123456789abcdef --hex
@@ -186,7 +226,7 @@ guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> message.txt
 
 ### 完整文档
 
-运行 `guomi help` 或 `guomi <command> --help` 查看更多选项。
+参阅 [CLI 完整说明](cli.md)，或运行 `guomi help`、`guomi <command> --help` 查看可用选项。
 
 ## 开发
 
@@ -278,29 +318,14 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 [0.2.0]: https://github.com/ZeroMarker/guomi/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ZeroMarker/guomi/releases/tag/v0.1.0
 
-## 与其他库对比
+## 兼容性与安全边界
 
-| 功能 | Guomi | 通用 crypto 库 |
-|------|-------|---------------|
-| SM2 签名/验签 | ✅ | ❌ |
-| SM2 加密/解密 | ✅ | ❌ |
-| SM3 哈希 | ✅ | ❌ |
-| SM4 加密 | ✅ | ❌ |
-| 运行时探测 | ✅ | - |
-| 纯 Elixir/Erlang | ✅ | ✅ |
-
-> 注：通用 crypto 库指 `:crypto`、`:public_key` 等 OTP 内置模块
-
-## 已知问题
-
-1. **SM2 互操作性** - 当前 SM2 签名与加密 API 固定为本库支持的格式，未覆盖完整标准互通参数
-2. **SM2 加密性能** - 纯 Elixir 曲线运算在计算密集型场景下性能低于 NIF 方案，长消息加密性能有待优化
-
-## 安全注意事项
-
-- 不要在新设计中使用 ECB 模式保护敏感数据。
-- CBC 模式必须为每次加密使用新的 16 字节 IV，且同一 key 下不得复用 IV。
-- 当前 SM2 加密格式用于 Guomi 内部往返，不应作为跨实现标准 SM2 密文格式。
+- **SM2 签名**：使用 SM3 预哈希与 raw `r || s` 签名格式，未实现用户 ID/ZA 参数，不应假定与 OpenSSL 或其他 SM2 实现互通。
+- **SM2 加密**：采用本库内部的 ECDH + SM3 派生密钥 + XOR + SM3 MAC 构造及 `C1 || C2 || C3` 格式。当前实现会对超过 32 字节的消息重复使用同一段 XOR 掩码，使相隔 32 字节的密文泄露对应明文的 XOR 关系；即使 MAC 能检测篡改，也不能修复该机密性缺陷。此接口仅保留用于兼容和测试，不得用于保护敏感数据或生产协议。
+- **ECB**：会泄露明文模式，不要用于新系统中的敏感数据保护。
+- **CBC**：每次加密必须使用不可预测且不复用的 16 字节 IV；当前接口不提供认证。
+- **CTR**：同一密钥下不得复用初始计数器块；当前接口只提供机密性，不提供认证。
+- **性能**：核心算法为纯 Elixir 实现。部署前请在目标硬件和实际消息大小上自行基准测试。
 
 ## FAQ
 
@@ -310,26 +335,11 @@ A: 所有算法均为纯 Elixir 实现，不依赖运行时 OpenSSL 的国密算
 
 ### Q: 如何在生产环境使用？
 
-A: 确保部署环境满足：
-- Erlang/OTP 24+
+A: 确保部署环境满足 Erlang/OTP 24+ 与 Elixir 1.14+，并根据业务场景处理密钥管理、随机数、消息认证、密文格式兼容性和性能评估。该库不替代完整的密钥管理或加密协议设计。
 
 ### Q: 性能如何？
 
-A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI 使用。参考基准（本机，OTP 26）：
-
-| 算法 | 操作 | 吞吐量/耗时 |
-|------|------|------------|
-| SM3 | hash 1 MiB | ~6 MB/s |
-| SM4 | ECB encrypt 1 MiB | ~10 MB/s |
-| SM4 | CBC encrypt 1 MiB | ~7 MB/s |
-| SM2 | generate_keypair | ~2.5 ms/op |
-| SM2 | sign | ~1.7 ms/op |
-| SM2 | verify | ~3.4 ms/op |
-| SM2 | encrypt / decrypt | ~3.7 / ~1.8 ms/op |
-
-可在本机运行 `mix run bench/bench.exs` 复现基准结果。
-
-> 实际性能取决于硬件。对于需要极致性能的场景，纯 Erlang NIF 方案可能更优。
+A: 纯 Elixir 实现的性能高度依赖 OTP 版本、硬件、消息大小和并发模型。仓库当前未维护可复现的正式基准结果，部署前应在目标环境中测量。
 
 ## Contributing
 
@@ -364,9 +374,4 @@ A: 纯 Elixir 实现，性能适用于日常加密操作和大数据量的 CLI �
 
 ## Roadmap
 
-### v0.5.0+ 规划
-- [x] 添加 SM4 CTR 模式
-- [x] 增加性能基准测试（`bench/bench.exs`）
-- [ ] 优化 SM2 加密 KDF 实现
-- [ ] SM9 算法支持（基于身份的加密）
-- [ ] 国密证书解析
+后续计划与已知改进项见 [todo.md](todo.md)。

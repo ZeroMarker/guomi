@@ -39,14 +39,15 @@ defmodule Guomi.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/ZeroMarker/guomi"},
-      files: ~w(lib .formatter.exs mix.exs README.md cli.md CHANGELOG.md LICENSE)
+      files:
+        ~w(lib .formatter.exs mix.exs README.md cli.md CHANGELOG.md todo.md hex.pm.md LICENSE)
     ]
   end
 
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "cli.md", "LICENSE", "CHANGELOG.md"],
+      extras: ["README.md", "cli.md", "CHANGELOG.md", "todo.md", "hex.pm.md", "LICENSE"],
       source_ref: "v#{@version}"
     ]
   end
