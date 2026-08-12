@@ -104,10 +104,12 @@ defmodule Guomi.OpenSSLCompatTest do
         public_key
 
     algorithm = der_wrap(0x30, oid_ec_public_key <> oid_sm2)
+
     private_key_info =
       <<0x02, 0x01, 0x00>> <>
         algorithm <>
         der_wrap(0x04, der_wrap(0x30, ec_private_key))
+
     der = der_wrap(0x30, private_key_info)
 
     encoded =
