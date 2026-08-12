@@ -11,7 +11,6 @@ defmodule Guomi.SM2.Curve do
 
   # -- Field operations -------------------------------------------------------
 
-  defp mod_add(a, b), do: mod(a + b, @p)
   defp mod_sub(a, b), do: mod(a - b, @p)
   defp mod_mul(a, b), do: mod(a * b, @p)
 
@@ -48,10 +47,90 @@ defmodule Guomi.SM2.Curve do
   def p, do: @p
   def generator, do: {@gx, @gy}
 
-  # -- Point operations in affine coordinates ---------------------------------
+  # -- Point operations in Jacobian coordinates -------------------------------
+  #
+  # Jacobian point (X, Y, Z) represents affine (X/Z^2, Y/Z^3); the point at
+  # infinity is (1, 1, 0). Working in Jacobian coordinates defers the modular
+  # inversion to a single conversion at the end, which is the dominant cost in
+  # affine double-and-add (one extended-Euclid per point operation).
 
   def neg(:infinity), do: :infinity
   def neg({x, y}), do: {x, mod_sub(0, y)}
+
+  # Doubling, specialized for a = p - 3 (SM2's curve coefficient):
+  #   M = 3*X^2 + a*Z^4 = 3*(X^2 - Z^4)
+  defp jac_double({x, y, z}) do
+    if z == 0 do
+      {1, 1, 0}
+    else
+      a = mod_mul(x, x)
+      b = mod_mul(y, y)
+      c = mod_mul(b, b)
+      s = mod_mul(4, mod_mul(x, b))
+      zz = mod_mul(z, z)
+      m = mod_sub(mod_mul(3, a), mod_mul(3, mod_mul(zz, zz)))
+      x3 = mod_sub(mod_mul(m, m), mod_mul(2, s))
+      y3 = mod_sub(mod_mul(m, mod_sub(s, x3)), mod_mul(8, c))
+      z3 = mod_mul(2, mod_mul(y, z))
+      {x3, y3, z3}
+    end
+  end
+
+  # Mixed addition: P (Jacobian) + Q (affine {x2, y2}, Z2 = 1)
+  defp jac_add_mixed({_x, _y, 0}, {x2, y2}), do: {x2, y2, 1}
+
+  defp jac_add_mixed({x1, y1, z1}, {x2, y2}) do
+    z1z1 = mod_mul(z1, z1)
+    u2 = mod_mul(x2, z1z1)
+    s2 = mod_mul(y2, mod_mul(z1, z1z1))
+    h = mod_sub(u2, x1)
+    r = mod_mul(2, mod_sub(s2, y1))
+
+    cond do
+      h == 0 and r == 0 ->
+        jac_double({x1, y1, z1})
+
+      h == 0 ->
+        {1, 1, 0}
+
+      true ->
+        i = mod_mul(mod_mul(2, h), mod_mul(2, h))
+        j = mod_mul(h, i)
+        v = mod_mul(x1, i)
+        x3 = mod_sub(mod_sub(mod_mul(r, r), j), mod_mul(2, v))
+        y3 = mod_sub(mod_mul(r, mod_sub(v, x3)), mod_mul(2, mod_mul(y1, j)))
+        z3 = mod_mul(2, mod_mul(z1, h))
+        {x3, y3, z3}
+    end
+  end
+
+  defp jac_to_affine({_x, _y, 0}), do: :infinity
+
+  defp jac_to_affine({x, y, z}) do
+    z_inv = mod_inv(z, @p)
+    z2 = mod_mul(z_inv, z_inv)
+    {mod_mul(x, z2), mod_mul(y, mod_mul(z2, z_inv))}
+  end
+
+  defp jac_mul(point, k) do
+    # MSB-first double-and-add over the fixed 256-bit scalar: the accumulator
+    # is doubled every iteration and the affine base point is added via the
+    # fast mixed-addition path when the bit is set.
+    do_jac_mul(point, k, 255, {1, 1, 0})
+  end
+
+  defp do_jac_mul(_point, _k, -1, acc), do: acc
+
+  defp do_jac_mul(point, k, i, acc) do
+    acc = jac_double(acc)
+
+    acc =
+      if Bitwise.band(Bitwise.bsr(k, i), 1) == 1,
+        do: jac_add_mixed(acc, point),
+        else: acc
+
+    do_jac_mul(point, k, i - 1, acc)
+  end
 
   # -- Scalar multiplication ---------------------------------------------------
 
@@ -62,94 +141,13 @@ defmodule Guomi.SM2.Curve do
 
   def mul(point, k) do
     k_mod = rem(k, @n)
-
-    if k_mod == 0 do
-      :infinity
-    else
-      k_mod
-      |> mul_jac(to_jacobian(point), {0, 1, 0})
-      |> from_jacobian()
-    end
-  end
-
-  defp mul_jac(0, _point, acc), do: acc
-
-  defp mul_jac(k, point, acc) do
-    acc = if Bitwise.band(k, 1) == 1, do: jac_add(acc, point), else: acc
-    mul_jac(Bitwise.bsr(k, 1), jac_double(point), acc)
-  end
-
-  # Jacobian coordinates avoid a modular inverse for every intermediate point
-  # operation. Only the final conversion back to affine coordinates needs one.
-  defp to_jacobian({x, y}), do: {x, y, 1}
-
-  defp from_jacobian({_x, _y, 0}), do: :infinity
-
-  defp from_jacobian({x, y, z}) do
-    z_inv = mod_inv(z)
-    z_inv_sq = mod_mul(z_inv, z_inv)
-    {mod_mul(x, z_inv_sq), mod_mul(y, mod_mul(z_inv_sq, z_inv))}
-  end
-
-  defp jac_double({_x, 0, _z}), do: {0, 1, 0}
-  defp jac_double({_x, _y, 0}), do: {0, 1, 0}
-
-  defp jac_double({x, y, z}) do
-    xx = mod_mul(x, x)
-    yy = mod_mul(y, y)
-    yyyy = mod_mul(yy, yy)
-    zz = mod_mul(z, z)
-    s = mod_mul(4, mod_mul(x, yy))
-    m = mod_add(mod_mul(3, xx), mod_mul(@a, mod_mul(zz, zz)))
-    x3 = mod_sub(mod_mul(m, m), mod_mul(2, s))
-    y3 = mod_sub(mod_mul(m, mod_sub(s, x3)), mod_mul(8, yyyy))
-    z3 = mod_mul(2, mod_mul(y, z))
-    {x3, y3, z3}
-  end
-
-  defp jac_add({_x, _y, 0}, point), do: point
-  defp jac_add(point, {_x, _y, 0}), do: point
-
-  defp jac_add({x1, y1, z1} = p1, {x2, y2, z2}) do
-    z1_sq = mod_mul(z1, z1)
-    z2_sq = mod_mul(z2, z2)
-    u1 = mod_mul(x1, z2_sq)
-    u2 = mod_mul(x2, z1_sq)
-    s1 = mod_mul(y1, mod_mul(z2, z2_sq))
-    s2 = mod_mul(y2, mod_mul(z1, z1_sq))
-
-    cond do
-      u1 != u2 -> jac_add_distinct(u1, u2, s1, s2, z1, z2)
-      s1 == s2 -> jac_double(p1)
-      true -> {0, 1, 0}
-    end
-  end
-
-  defp jac_add_distinct(u1, u2, s1, s2, z1, z2) do
-    h = mod_sub(u2, u1)
-    r = mod_sub(s2, s1)
-    h_sq = mod_mul(h, h)
-    h_cubed = mod_mul(h, h_sq)
-    u1_h_sq = mod_mul(u1, h_sq)
-    x3 = mod_sub(mod_sub(mod_mul(r, r), h_cubed), mod_mul(2, u1_h_sq))
-    y3 = mod_sub(mod_mul(r, mod_sub(u1_h_sq, x3)), mod_mul(s1, h_cubed))
-    z3 = mod_mul(h, mod_mul(z1, z2))
-    {x3, y3, z3}
+    if k_mod == 0, do: :infinity, else: jac_mul(point, k_mod) |> jac_to_affine()
   end
 
   # -- Encoding / Decoding ----------------------------------------------------
 
   def encode_public({x, y}) do
     <<0x04, x::256-big, y::256-big>>
-  end
-
-  def decode_public(<<0x04, x::32-binary, y::32-binary>>) do
-    {:binary.decode_unsigned(x, :big), :binary.decode_unsigned(y, :big)}
-  end
-
-  def decode_public(<<0x04, rest::binary>>) when byte_size(rest) == 64 do
-    <<x::32-binary, y::32-binary>> = rest
-    {:binary.decode_unsigned(x, :big), :binary.decode_unsigned(y, :big)}
   end
 
   def encode_signature(r, s), do: <<r::256-big, s::256-big>>
@@ -160,10 +158,12 @@ defmodule Guomi.SM2.Curve do
 
   # -- Key generation ---------------------------------------------------------
 
+  # Private keys must be in [1, n - 2] (GM/T 0003-2012). A key of n - 1 would
+  # make (1 + d) ≡ 0 (mod n), which could never produce a valid signature.
   def generate_private_key do
     bytes = :crypto.strong_rand_bytes(32)
     k = :binary.decode_unsigned(bytes, :big)
-    if k == 0, do: generate_private_key(), else: rem(k, @n - 1) + 1
+    if k == 0, do: generate_private_key(), else: rem(k, @n - 2) + 1
   end
 
   def generate_keypair do
@@ -195,15 +195,25 @@ defmodule Guomi.SM2.Curve do
   end
 
   defp sign_with_e(e, d) do
+    case mod_inv(1 + d, @n) do
+      # 1 + d ≡ 0 (mod n) means d = n - 1, outside the valid private key
+      # range. Reject it as an invalid key instead of looping forever on
+      # s = 0 (every retry would produce s = 0 again).
+      0 -> {:error, :invalid_key}
+      inv -> do_sign_with_e(e, d, inv)
+    end
+  end
+
+  defp do_sign_with_e(e, d, inv) do
     k = generate_k()
     {x1, _y1} = mul(generator(), k)
     r = scalar_add(e, x1)
 
     if r == 0 or r + k == @n do
-      sign_with_e(e, d)
+      do_sign_with_e(e, d, inv)
     else
-      s = scalar_mul(mod_inv(1 + d, @n), scalar_sub(k, scalar_mul(r, d)))
-      if s == 0, do: sign_with_e(e, d), else: {:ok, encode_signature(r, s)}
+      s = scalar_mul(inv, scalar_sub(k, scalar_mul(r, d)))
+      if s == 0, do: do_sign_with_e(e, d, inv), else: {:ok, encode_signature(r, s)}
     end
   end
 
@@ -269,9 +279,5 @@ defmodule Guomi.SM2.Curve do
     x3 = mod_sub(mod_sub(mod_mul(lam, lam), x1), x2)
     y3 = mod_sub(mod_mul(lam, mod_sub(x1, x3)), y1)
     {x3, y3}
-  end
-
-  def private_key_to_int(key_bin) when byte_size(key_bin) == 32 do
-    :binary.decode_unsigned(key_bin, :big)
   end
 end

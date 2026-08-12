@@ -98,8 +98,11 @@ defmodule Guomi.SM2 do
     ArgumentError -> {:error, :invalid_key}
   end
 
+  # SM2 private keys must be in [1, n - 2] (GM/T 0003-2012).
+  # A key of n - 1 would make (1 + d) ≡ 0 (mod n), so signing could never
+  # produce a valid s and must be rejected instead of retrying forever.
   defp decode_private_key(<<key::256-big>>) do
-    if key > 0 and key < Curve.n(), do: {:ok, key}, else: {:error, :invalid_key}
+    if key > 0 and key < Curve.n() - 1, do: {:ok, key}, else: {:error, :invalid_key}
   end
 
   defp decode_private_key(_), do: {:error, :invalid_key}

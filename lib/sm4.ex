@@ -277,6 +277,21 @@ defmodule Guomi.SM4 do
 
   @fk {0xA3B1BAC6, 0x56AA3350, 0x677D9197, 0xB27022DC}
 
+  # T0[a] = L(S(a)) for a in 0..255, with the S-box output in the low byte.
+  # Because L is linear and rotation-invariant, the round transform becomes
+  # four byte-table lookups instead of four S-box lookups plus four rotations:
+  #   L(tau(x)) = rotl(T0[x>>>24], 24) ^ rotl(T0[(x>>>16)&&&0xFF], 16)
+  #             ^ rotl(T0[(x>>>8)&&&0xFF], 8) ^ T0[x&&&0xFF]
+  @t0 (for a <- 0..255 do
+         s = elem(@s_box, a)
+         r2 = (s <<< 2 ||| s >>> 30) &&& 0xFFFFFFFF
+         r10 = (s <<< 10 ||| s >>> 22) &&& 0xFFFFFFFF
+         r18 = (s <<< 18 ||| s >>> 14) &&& 0xFFFFFFFF
+         r24 = (s <<< 24 ||| s >>> 8) &&& 0xFFFFFFFF
+         bxor(s, bxor(r2, bxor(r10, bxor(r18, r24))))
+       end)
+      |> List.to_tuple()
+
   # CK[i] = (4i+0)*7 mod 256 || (4i+1)*7 mod 256 || (4i+2)*7 mod 256 || (4i+3)*7 mod 256
   @ck {
     0x00070E15,
@@ -490,8 +505,17 @@ defmodule Guomi.SM4 do
   defp rounds(x0, x1, x2, x3, _rk, i) when i > 31, do: {x3, x2, x1, x0}
 
   defp rounds(x0, x1, x2, x3, rk, i) do
-    x4 = bxor(x0, l(tau(bxor(bxor(bxor(x1, x2), x3), elem(rk, i)))))
+    x4 = bxor(x0, t_lookup(bxor(bxor(bxor(x1, x2), x3), elem(rk, i))))
     rounds(x1, x2, x3, x4, rk, i + 1)
+  end
+
+  # -- tau + L fused into byte-table lookups (see @t0) -------------------------
+
+  defp t_lookup(x) do
+    bxor(
+      bxor(rotl24(elem(@t0, x >>> 24)), rotl16(elem(@t0, x >>> 16 &&& 0xFF))),
+      bxor(rotl8(elem(@t0, x >>> 8 &&& 0xFF)), elem(@t0, x &&& 0xFF))
+    )
   end
 
   # -- tau: S-box substitution on 4 bytes of a 32-bit word ---------------------
@@ -510,13 +534,13 @@ defmodule Guomi.SM4 do
 
   # -- Linear transforms -------------------------------------------------------
 
-  defp l(b) do
-    bxor(b, bxor(rotl(b, 2), bxor(rotl(b, 10), bxor(rotl(b, 18), rotl(b, 24)))))
-  end
-
   defp l_prime(b) do
     bxor(b, bxor(rotl(b, 13), rotl(b, 23)))
   end
+
+  defp rotl8(x), do: (x <<< 8 ||| x >>> 24) &&& 0xFFFFFFFF
+  defp rotl16(x), do: (x <<< 16 ||| x >>> 16) &&& 0xFFFFFFFF
+  defp rotl24(x), do: (x <<< 24 ||| x >>> 8) &&& 0xFFFFFFFF
 
   defp rotl(x, n) do
     s = rem(n, 32)
