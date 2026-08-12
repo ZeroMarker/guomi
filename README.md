@@ -3,10 +3,11 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/guomi.svg)](https://hex.pm/packages/guomi)
 [![Hex.pm](https://img.shields.io/hexpm/dt/guomi.svg)](https://hex.pm/packages/guomi)
 [![Hex.pm](https://img.shields.io/hexpm/l/guomi.svg)](https://github.com/ZeroMarker/guomi/blob/main/LICENSE)
+[![CI](https://github.com/ZeroMarker/guomi/actions/workflows/ci.yml/badge.svg)](https://github.com/ZeroMarker/guomi/actions/workflows/ci.yml)
 
 国密算法纯 Elixir 实现（GM/T 0002-2012, GM/T 0003-2012, GM/T 0004-2012），无需外部依赖。
 
-> 当前 SM2 签名与加密接口有明确的兼容性限制，不应直接视为完整的跨实现标准 SM2 接口。详见[兼容性与安全边界](#兼容性与安全边界)。
+> 当前 SM2 签名与加密接口有明确的兼容性限制，不应直接视为完整的跨实现标准 SM2 接口；其中加密接口不得用于保护敏感数据。详见[兼容性与安全边界](#兼容性与安全边界)。
 
 ## 文档导航
 
@@ -39,7 +40,7 @@
 | SM4 ECB/CBC | 纯 Elixir 实现（GM/T 0002-2012 S-box 与密钥扩展），支持 `:pkcs7` 与 `:none` 填充 |
 | SM4 CTR | 纯 Elixir 实现，16 字节初始计数器块按大端 128 位整数递增，不提供认证 |
 | SM2 密钥/签名 | 纯 Elixir 椭圆曲线运算，SM3 预哈希，64 字节 raw `r || s` 签名 |
-| SM2 加密/解密 | 纯 Elixir ECDH + SM3 KDF + XOR + SM3 MAC，内部 `C1 || C2 || C3` 格式 |
+| SM2 加密/解密 | Guomi 内部 `C1 || C2 || C3` 格式，仅保留用于兼容和测试；不得用于敏感数据 |
 
 ## API 约定
 
@@ -142,7 +143,7 @@ Guomi.SM4.supported?()
 
 ### SM2 签名和加密
 
-> 兼容性提示：当前 SM2 签名使用 SM3 预哈希和 raw `r || s` 签名格式，未暴露用户 ID/ZA 参数。SM2 加密使用本库内部格式，适合 Guomi 自身加解密往返，不应假定可与 OpenSSL 或其他 SM2 实现互通。
+> 兼容性提示：当前 SM2 签名使用 SM3 预哈希和 raw `r || s` 签名格式，未暴露用户 ID/ZA 参数。SM2 加密使用本库内部格式，不应假定可与 OpenSSL 或其他 SM2 实现互通；由于长消息会重复 XOR 掩码，该接口仅用于兼容和测试，不得用于敏感数据或生产协议。
 
 ```elixir
 # 生成密钥对
@@ -242,6 +243,18 @@ mix deps.get
 mix test
 ```
 
+### 完整质量检查
+
+```bash
+mix format --check-formatted
+mix compile --warnings-as-errors
+mix test
+mix credo --strict
+MIX_ENV=test mix coveralls.json
+```
+
+Windows PowerShell 中可将最后一条命令写为 `$env:MIX_ENV="test"; mix coveralls.json`。
+
 ### 代码格式化
 
 ```bash
@@ -263,6 +276,14 @@ mix dialyzer
 ```bash
 mix docs
 ```
+
+### 运行微基准
+
+```bash
+mix run bench/bench.exs
+```
+
+该脚本用于本机回归比较，不代表跨硬件的正式性能基线。记录结果时应同时注明硬件、操作系统、OTP/Elixir 版本和运行参数。
 
 ## 许可证
 
@@ -339,7 +360,7 @@ A: 确保部署环境满足 Erlang/OTP 24+ 与 Elixir 1.14+，并根据业务场
 
 ### Q: 性能如何？
 
-A: 纯 Elixir 实现的性能高度依赖 OTP 版本、硬件、消息大小和并发模型。仓库当前未维护可复现的正式基准结果，部署前应在目标环境中测量。
+A: 纯 Elixir 实现的性能高度依赖 OTP 版本、硬件、消息大小和并发模型。可运行 `mix run bench/bench.exs` 做本机回归比较；仓库当前不维护跨硬件的正式性能基线，部署前仍应在目标环境中测量。
 
 ## Contributing
 

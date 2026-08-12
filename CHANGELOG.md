@@ -30,6 +30,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   SM2 long-message confidentiality limits and SM4 confidentiality-only mode caveats.
 - Aligned CLI input parsing, SM2 output, and SM4 mode documentation with the
   current implementation.
+- Synchronized README, standalone CLI documentation, and embedded CLI help;
+  added current quality-check and micro-benchmark instructions.
 - Updated the Hex release guide and development roadmap.
 
 ## [0.5.1] - 2026-05-31

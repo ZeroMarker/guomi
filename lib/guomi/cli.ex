@@ -434,12 +434,12 @@ defmodule Guomi.CLI do
 
     INPUT:
         If no input is specified, reads from stdin.
-        If a file path is provided, reads from the file.
-        Otherwise, treats arguments as the message.
+        A single argument is always treated as a file path.
+        Multiple arguments are joined with spaces and treated as the message.
 
     EXAMPLES:
         echo -n "hello" | guomi sm3
-        guomi sm3 --hex "hello world"
+        guomi sm3 --hex hello world
         guomi sm3 --hex file.txt
     """)
   end
@@ -464,7 +464,8 @@ defmodule Guomi.CLI do
 
     INPUT:
         If no input is specified, reads from stdin.
-        If a file path is provided, reads from the file.
+        A single argument is treated as a file path.
+        Multiple arguments are joined with spaces and treated as the input.
 
     EXAMPLES:
         # Encrypt with ECB
@@ -499,12 +500,14 @@ defmodule Guomi.CLI do
         --message <msg>     Message to sign/verify/encrypt
         --signature <hex>   Signature to verify (hex encoded)
         --ciphertext <hex>  Ciphertext to decrypt (hex encoded)
-        --hex             Output as hexadecimal
+        --hex             Reserved compatibility option; key/signature/ciphertext output is already hex
         --help            Show this help message
 
     INPUT:
         If no input is specified, reads from stdin.
-        If a file path is provided, reads from the file.
+        A single argument is treated as a file path.
+        Multiple arguments are joined with spaces and treated as the message.
+        --message takes precedence for sign, verify, and encrypt operations.
 
     EXAMPLES:
         # Generate keypair

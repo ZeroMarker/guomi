@@ -257,13 +257,13 @@ guomi sm2 --decrypt \
 
 ```cmd
 set ELIXIR_ERL_OPTIONS=-noinput
-guomi sm3 --hex "hello"
+guomi version
 ```
 
 或一次性命令：
 
 ```cmd
-set ELIXIR_ERL_OPTIONS=-noinput && guomi sm3 --hex "hello"
+set ELIXIR_ERL_OPTIONS=-noinput && guomi version
 ```
 
 ### Q: 返回码约定？
