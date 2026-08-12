@@ -402,43 +402,43 @@ defmodule Guomi.SM4 do
   defp cbc_encrypt(data, key, iv) do
     rk = expand_key(key)
 
-    {_, ct} =
-      for <<b::binary-size(16) <- data>>, reduce: {iv, <<>>} do
+    {_, blocks} =
+      for <<b::binary-size(16) <- data>>, reduce: {iv, []} do
         {prev, acc} ->
           enc = crypt_block(xor_bytes(b, prev), rk)
-          {enc, acc <> enc}
+          {enc, [enc | acc]}
       end
 
-    ct
+    blocks_to_binary(blocks)
   end
 
   defp cbc_decrypt(data, key, iv) do
     rk = expand_key(key)
     rk_rev = rk |> Tuple.to_list() |> Enum.reverse() |> List.to_tuple()
 
-    {_, pt} =
-      for <<b::binary-size(16) <- data>>, reduce: {iv, <<>>} do
+    {_, blocks} =
+      for <<b::binary-size(16) <- data>>, reduce: {iv, []} do
         {prev, acc} ->
-          {b, acc <> xor_bytes(crypt_block(b, rk_rev), prev)}
+          {b, [xor_bytes(crypt_block(b, rk_rev), prev) | acc]}
       end
 
-    pt
+    blocks_to_binary(blocks)
   end
 
   # -- CTR mode ----------------------------------------------------------------
 
   defp ctr_crypt(data, key, counter) do
     rk = expand_key(key)
-    do_ctr_crypt(data, counter, rk, <<>>)
+    do_ctr_crypt(data, counter, rk, [])
   end
 
-  defp do_ctr_crypt(<<>>, _counter, _rk, acc), do: acc
+  defp do_ctr_crypt(<<>>, _counter, _rk, acc), do: blocks_to_binary(acc)
 
   defp do_ctr_crypt(data, counter, rk, acc) when byte_size(data) < @block_size do
     size = byte_size(data)
     keystream = crypt_block(counter, rk)
     <<mask::binary-size(size), _::binary>> = keystream
-    acc <> xor_bytes(data, mask)
+    blocks_to_binary([xor_bytes(data, mask) | acc])
   end
 
   defp do_ctr_crypt(<<block::binary-size(@block_size), rest::binary>>, counter, rk, acc) do
@@ -446,7 +446,7 @@ defmodule Guomi.SM4 do
       rest,
       increment_counter(counter),
       rk,
-      acc <> xor_bytes(block, crypt_block(counter, rk))
+      [xor_bytes(block, crypt_block(counter, rk)) | acc]
     )
   end
 
@@ -455,6 +455,10 @@ defmodule Guomi.SM4 do
   end
 
   defp xor_bytes(a, b), do: :crypto.exor(a, b)
+
+  defp blocks_to_binary(blocks) do
+    blocks |> Enum.reverse() |> IO.iodata_to_binary()
+  end
 
   # -- Key expansion -----------------------------------------------------------
 
