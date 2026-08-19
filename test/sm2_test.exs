@@ -140,8 +140,7 @@ defmodule Guomi.SM2Test do
             "B1B6AA29DF212FD8763182BC0D421CA1BB9038FD1F7F42D4840B69C485BBC1AA"
         )
 
-      assert {:ok, ^expected_za} =
-               SM2.user_identity_digest("1234567812345678", public_key)
+      assert {:ok, ^expected_za} = SM2.user_identity_digest("1234567812345678", public_key)
 
       assert {:ok, true} =
                SM2.verify_standard(
@@ -257,8 +256,7 @@ defmodule Guomi.SM2Test do
             "21886CA989CA9C7D58087307CA93092D651EFA"
         )
 
-      assert {:ok, "encryption standard"} =
-               SM2.decrypt_standard(ciphertext, private_key)
+      assert {:ok, "encryption standard"} = SM2.decrypt_standard(ciphertext, private_key)
     end
 
     test "roundtrips long messages with C1 || C3 || C2 framing" do

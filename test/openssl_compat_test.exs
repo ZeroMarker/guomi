@@ -265,8 +265,7 @@ defmodule Guomi.OpenSSLCompatTest do
     user_id = "guomi-test-user"
 
     with_sm2_files(message, private_key, public_key, fn message_path, key_path, signature_path ->
-      assert {:ok, raw_signature} =
-               Guomi.SM2.sign_standard(message, private_key, user_id)
+      assert {:ok, raw_signature} = Guomi.SM2.sign_standard(message, private_key, user_id)
 
       File.write!(signature_path, raw_signature_to_der(raw_signature))
 
@@ -360,8 +359,7 @@ defmodule Guomi.OpenSSLCompatTest do
             assert {_output, 0} = run_openssl(encrypt_args)
             openssl_ciphertext = ciphertext_path |> File.read!() |> der_ciphertext_to_raw()
 
-            assert {:ok, ^message} =
-                     Guomi.SM2.decrypt_standard(openssl_ciphertext, private_key)
+            assert {:ok, ^message} = Guomi.SM2.decrypt_standard(openssl_ciphertext, private_key)
 
           {output, status} ->
             flunk("OpenSSL SM2 decryption failed (#{status}): #{output}")
