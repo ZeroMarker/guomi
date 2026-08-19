@@ -70,7 +70,7 @@ Guomi.supported()
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.5.1"}
+    {:guomi, "~> 0.5.2"}
   ]
 end
 ```
@@ -308,6 +308,11 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.5.2] - 2026-08-19
+- Added standards-compatible SM2 ZA-aware signing and C1/C3/C2 encryption APIs
+- Removed modulo bias from SM2 private-key and signature nonce generation
+- Improved legacy SM2 ciphertext error reporting for off-curve ephemeral points
+
 #### [0.5.1] - 2026-05-31
 - Added SM4 CTR APIs for arbitrary-length data without padding
 - Tightened SM2 invalid-input error handling
@@ -343,6 +348,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.5.2]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2

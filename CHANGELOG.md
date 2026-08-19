@@ -5,7 +5,7 @@ All notable changes to Guomi are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.2] - 2026-08-19
 
 ### Added
 
@@ -236,7 +236,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/ZeroMarker/guomi/compare/v0.4.1...v0.4.2
