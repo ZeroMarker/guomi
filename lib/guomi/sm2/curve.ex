@@ -183,12 +183,14 @@ defmodule Guomi.SM2.Curve do
 
   # -- Key generation ---------------------------------------------------------
 
-  # Private keys must be in [1, n - 2] (GM/T 0003-2012). A key of n - 1 would
-  # make (1 + d) ≡ 0 (mod n), which could never produce a valid signature.
+  # Private keys must be uniform in [1, n - 2] (GM/T 0003-2012). A key of
+  # n - 1 would make (1 + d) ≡ 0 (mod n), which could never produce a valid
+  # signature. We use rejection sampling rather than a modular reduction so
+  # the distribution has no modulo bias; 2^256 is only ~2^-31 farther than n,
+  # so an extra draw is vanishingly rare.
   def generate_private_key do
-    bytes = :crypto.strong_rand_bytes(32)
-    k = :binary.decode_unsigned(bytes, :big)
-    if k == 0, do: generate_private_key(), else: rem(k, @n - 2) + 1
+    k = :binary.decode_unsigned(:crypto.strong_rand_bytes(32), :big)
+    if k >= 1 and k <= @n - 2, do: k, else: generate_private_key()
   end
 
   def generate_keypair do
@@ -249,10 +251,13 @@ defmodule Guomi.SM2.Curve do
     end
   end
 
+  # Ephemeral scalar k must be uniform in [1, n - 1]. Rejection sampling
+  # avoids the modulo bias a reduction would introduce; the rejection region
+  # is only k = 0 and [n, 2^256 - 1], so retries are essentially never
+  # needed.
   defp generate_k do
-    bytes = :crypto.strong_rand_bytes(32)
-    k = :binary.decode_unsigned(bytes, :big)
-    if k == 0, do: generate_k(), else: rem(k, @n - 1) + 1
+    k = :binary.decode_unsigned(:crypto.strong_rand_bytes(32), :big)
+    if k >= 1 and k <= @n - 1, do: k, else: generate_k()
   end
 
   def verify(message_hash, signature, public_key) do

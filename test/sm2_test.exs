@@ -26,7 +26,7 @@ defmodule Guomi.SM2Test do
     end
 
     test "generates private keys in the standard [1, n-2] range" do
-      for _ <- 1..20 do
+      for _ <- 1..200 do
         assert {:ok, private_key, _public_key} = SM2.generate_keypair()
         priv = :binary.decode_unsigned(private_key, :big)
         assert priv > 0
@@ -239,6 +239,15 @@ defmodule Guomi.SM2Test do
       assert {:ok, priv, _pub} = SM2.generate_keypair()
 
       assert {:error, :invalid_ciphertext} = SM2.decrypt(<<0::96*8>>, priv)
+    end
+
+    test "decrypt with an off-curve ephemeral point reports invalid ciphertext" do
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      {:ok, ciphertext} = SM2.encrypt("test", public_key)
+      <<_c1::binary-size(65), rest::binary>> = ciphertext
+      off_curve_c1 = <<0x04, 0::64*8>>
+
+      assert {:error, :invalid_ciphertext} = SM2.decrypt(off_curve_c1 <> rest, private_key)
     end
   end
 

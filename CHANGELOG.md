@@ -63,6 +63,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Updated the SM2 migration guide to reflect the implemented standard APIs,
   current interoperability coverage, and concrete caller migration steps.
 
+### Fixed
+
+- SM2 private key generation and signature ephemeral scalars now use rejection
+  sampling into `[1, n-2]` / `[1, n-1]` instead of a modular reduction,
+  removing the modulo bias toward small values.
+- Legacy `decrypt/2` now reports an off-curve ephemeral point in `C1` as
+  `:invalid_ciphertext` instead of the misleading `:invalid_key`.
+
 ## [0.5.1] - 2026-05-31
 
 ### Added

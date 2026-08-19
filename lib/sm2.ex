@@ -181,7 +181,7 @@ defmodule Guomi.SM2 do
   def decrypt(ciphertext, private_key) do
     with {:ok, priv_int} <- decode_private_key(private_key),
          {:ok, ephemeral_pub_bin, encrypted_data, mac} <- split_ciphertext(ciphertext),
-         {:ok, pub_point} <- decode_public_key(ephemeral_pub_bin),
+         {:ok, pub_point} <- decode_legacy_ephemeral_point(ephemeral_pub_bin),
          {:ok, shared_x} <- Curve.shared_secret(priv_int, pub_point) do
       shared = <<shared_x::256-big>>
       {key_enc, key_mac} = derive_keys(shared)
@@ -312,6 +312,13 @@ defmodule Guomi.SM2 do
        do: {:ok, c1, c3, c2}
 
   defp split_standard_ciphertext(_ciphertext), do: {:error, :invalid_ciphertext}
+
+  defp decode_legacy_ephemeral_point(c1) do
+    case decode_public_key(c1) do
+      {:ok, point} -> {:ok, point}
+      {:error, :invalid_key} -> {:error, :invalid_ciphertext}
+    end
+  end
 
   defp decode_ciphertext_point(c1) do
     case decode_public_key(c1) do
