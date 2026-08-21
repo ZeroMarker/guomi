@@ -44,6 +44,29 @@ defmodule Guomi.SM2Test do
       assert rem(2 * inverse, order) == 1
     end
 
+    test "valid_point?/1 accepts curve points and rejects others" do
+      assert Curve.valid_point?(Curve.generator())
+      refute Curve.valid_point?({0, 0})
+      refute Curve.valid_point?({Curve.p(), 0})
+      refute Curve.valid_point?(:infinity)
+    end
+
+    test "shared_point/2 rejects off-curve points before ECDH" do
+      assert {:error, :invalid_point} = Curve.shared_point(1, {0, 0})
+      assert {:error, :invalid_point} = Curve.shared_point(1, :infinity)
+
+      assert {:ok, private_key, public_key} = SM2.generate_keypair()
+      <<0x04, x::32-binary, y::32-binary>> = public_key
+      point = {:binary.decode_unsigned(x, :big), :binary.decode_unsigned(y, :big)}
+      priv = :binary.decode_unsigned(private_key, :big)
+      assert {:ok, _shared} = Curve.shared_point(priv, point)
+    end
+
+    test "verify/3 returns false for malformed signatures instead of raising" do
+      refute Curve.verify(<<0::256>>, <<1, 2, 3>>, Curve.generator())
+      refute Curve.verify(<<0::256>>, :infinity, Curve.generator())
+    end
+
     test "scalar multiplication matches fixed SM2 curve vectors" do
       assert Curve.mul(Curve.generator(), 1) == Curve.generator()
 

@@ -96,6 +96,8 @@ Guomi.SM2.decrypt_standard(ciphertext, private_key)
 4. 迁移期间分别统计旧、新入口的使用量；不要在一个解密路径中自动尝试两种格式。
 5. 旧入口未来只能在主版本升级中考虑删除；不得静默改变 `sign/2` 或 `decrypt/2` 的语义。
 
+CLI 对应关系：`guomi sm2 --sign/--verify --user-id <id>` 等价于 `sign_standard/3` / `verify_standard/4`；`guomi sm2 --encrypt/--decrypt --standard` 等价于 `encrypt_standard/2` / `decrypt_standard/2`。不带这些选项时 CLI 保持旧兼容行为。
+
 ## 测试与验收
 
 - ZA、签名和验签必须有公开标准向量。

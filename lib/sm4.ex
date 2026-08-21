@@ -646,10 +646,20 @@ defmodule Guomi.SM4 do
     sz = byte_size(data)
     <<body::binary-size(sz - pl), pad::binary-size(pl)>> = data
 
-    if pad == :binary.copy(<<pl>>, pl) do
+    # Compare every padding byte even after a mismatch so decryption timing
+    # does not reveal how many bytes matched (padding-oracle hardening).
+    if constant_time_equals?(pad, :binary.copy(<<pl>>, pl)) do
       {:ok, body}
     else
       {:error, :invalid_padding}
     end
+  end
+
+  defp constant_time_equals?(lhs, rhs), do: constant_time_diff(lhs, rhs, 0) == 0
+
+  defp constant_time_diff(<<>>, <<>>, acc), do: acc
+
+  defp constant_time_diff(<<x, lhs::binary>>, <<y, rhs::binary>>, acc) do
+    constant_time_diff(lhs, rhs, bor(acc, bxor(x, y)))
   end
 end

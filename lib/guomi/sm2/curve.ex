@@ -181,6 +181,8 @@ defmodule Guomi.SM2.Curve do
     {:binary.decode_unsigned(r, :big), :binary.decode_unsigned(s, :big)}
   end
 
+  def decode_signature(_signature), do: nil
+
   # -- Key generation ---------------------------------------------------------
 
   # Private keys must be uniform in [1, n - 2] (GM/T 0003-2012). A key of
@@ -215,11 +217,24 @@ defmodule Guomi.SM2.Curve do
   end
 
   def shared_point(private_key, public_point) do
-    case mul(public_point, private_key) do
-      :infinity -> {:error, :decryption_failed}
-      {_sx, _sy} = point -> {:ok, point}
+    # Validate the peer point here so safety does not depend on callers
+    # remembering to reject off-curve input before ECDH.
+    if valid_point?(public_point) do
+      case mul(public_point, private_key) do
+        :infinity -> {:error, :decryption_failed}
+        {_sx, _sy} = point -> {:ok, point}
+      end
+    else
+      {:error, :invalid_point}
     end
   end
+
+  def valid_point?({x, y}) do
+    x >= 0 and x < @p and y >= 0 and y < @p and
+      mod(y * y - (x * x * x + @a * x + @b), @p) == 0
+  end
+
+  def valid_point?(_), do: false
 
   # -- ECDSA signature (SM2 variant) ------------------------------------------
 
@@ -261,9 +276,16 @@ defmodule Guomi.SM2.Curve do
   end
 
   def verify(message_hash, signature, public_key) do
-    {r, s} = decode_signature(signature)
-    e = :binary.decode_unsigned(message_hash, :big)
-    verify_with_e(e, r, s, public_key)
+    case decode_signature(signature) do
+      {r, s} ->
+        e = :binary.decode_unsigned(message_hash, :big)
+        verify_with_e(e, r, s, public_key)
+
+      # Malformed signatures never verify; Guomi.SM2 reports them as
+      # {:error, :invalid_signature} before reaching this point.
+      nil ->
+        false
+    end
   end
 
   defp verify_with_e(e, r, s, public_key) do

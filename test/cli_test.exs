@@ -271,4 +271,102 @@ defmodule Guomi.CLITest do
 
     assert String.trim(pt) == "secret"
   end
+
+  test "sm2 --user-id signs and verifies with the standard ZA computation" do
+    assert {:ok, priv, pub} = Guomi.SM2.generate_keypair()
+    priv_hex = Base.encode16(priv, case: :lower)
+    pub_hex = Base.encode16(pub, case: :lower)
+    user_id = "1234567812345678"
+
+    {sig_hex, 0} =
+      run_cli([
+        "sm2",
+        "--sign",
+        "--user-id",
+        user_id,
+        "--private-key",
+        priv_hex,
+        "--message",
+        "test"
+      ])
+
+    sig_hex = String.trim(sig_hex)
+    {:ok, sig} = Base.decode16(sig_hex, case: :lower)
+
+    assert {:ok, true} = Guomi.SM2.verify_standard("test", sig, pub, user_id)
+    assert {:ok, false} = Guomi.SM2.verify("test", sig, pub)
+
+    {out, 0} =
+      run_cli([
+        "sm2",
+        "--verify",
+        "--user-id",
+        user_id,
+        "--public-key",
+        pub_hex,
+        "--signature",
+        sig_hex,
+        "--message",
+        "test"
+      ])
+
+    assert out =~ "valid"
+
+    {out2, status2} =
+      run_cli([
+        "sm2",
+        "--verify",
+        "--user-id",
+        "9876543210987654",
+        "--public-key",
+        pub_hex,
+        "--signature",
+        sig_hex,
+        "--message",
+        "test"
+      ])
+
+    assert status2 != 0
+    assert out2 =~ "INVALID"
+  end
+
+  test "sm2 --standard encrypts and decrypts the C1 || C3 || C2 format" do
+    assert {:ok, priv, pub} = Guomi.SM2.generate_keypair()
+    priv_hex = Base.encode16(priv, case: :lower)
+    pub_hex = Base.encode16(pub, case: :lower)
+
+    {ct_hex, 0} =
+      run_cli(["sm2", "--encrypt", "--standard", "--public-key", pub_hex, "--message", "secret"])
+
+    ct_hex = String.trim(ct_hex)
+    {:ok, ct} = Base.decode16(ct_hex, case: :lower)
+    assert {:ok, "secret"} = Guomi.SM2.decrypt_standard(ct, priv)
+
+    {pt, 0} =
+      run_cli([
+        "sm2",
+        "--decrypt",
+        "--standard",
+        "--private-key",
+        priv_hex,
+        "--ciphertext",
+        ct_hex
+      ])
+
+    assert String.trim(pt) == "secret"
+  end
+
+  test "sm2 rejects --user-id outside sign/verify and --standard outside encrypt/decrypt" do
+    {out1, status1} = run_cli(["sm2", "--encrypt", "--user-id", "alice"])
+    assert status1 != 0
+    assert out1 =~ "--user-id applies to --sign/--verify only"
+
+    {out2, status2} = run_cli(["sm2", "--generate", "--standard"])
+    assert status2 != 0
+    assert out2 =~ "--standard applies to --encrypt/--decrypt only"
+
+    {out3, status3} = run_cli(["sm2", "--verify", "--standard"])
+    assert status3 != 0
+    assert out3 =~ "--standard applies to --encrypt/--decrypt only"
+  end
 end

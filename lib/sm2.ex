@@ -397,11 +397,23 @@ defmodule Guomi.SM2 do
   # -- XOR with keystream -----------------------------------------------------
 
   defp xor_with_keystream(data, key) do
-    key_len = byte_size(key)
-    data_len = byte_size(data)
-    repeats = div(data_len, key_len) + 1
-    keystream = :binary.part(:binary.copy(key, repeats), 0, data_len)
-    :crypto.exor(data, keystream)
+    stream_xor_with_keystream(data, key, byte_size(key), [])
+  end
+
+  # XOR one key-length chunk at a time so peak memory stays proportional to the
+  # message instead of materialising a full repeated keystream (~2x message size).
+  defp stream_xor_with_keystream(<<>>, _key, _key_len, acc),
+    do: IO.iodata_to_binary(Enum.reverse(acc))
+
+  defp stream_xor_with_keystream(data, key, key_len, acc) when byte_size(data) >= key_len do
+    <<chunk::binary-size(key_len), rest::binary>> = data
+    stream_xor_with_keystream(rest, key, key_len, [:crypto.exor(chunk, key) | acc])
+  end
+
+  defp stream_xor_with_keystream(data, key, _key_len, acc) do
+    size = byte_size(data)
+    <<mask::binary-size(size), _::binary>> = key
+    IO.iodata_to_binary(Enum.reverse([:crypto.exor(data, mask) | acc]))
   end
 
   # -- Constant-time comparison -----------------------------------------------

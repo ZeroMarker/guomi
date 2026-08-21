@@ -234,8 +234,14 @@ guomi sm2 --generate
 # SM2 签名
 echo "message" | guomi sm2 --sign --private-key <hex-key>
 
+# SM2 标准签名（显式 user ID，计算 ZA，raw r || s）
+echo "message" | guomi sm2 --sign --user-id 1234567812345678 --private-key <hex-key>
+
 # SM2 验签
 guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> --file message.txt
+
+# SM2 标准加密（C1 || C3 || C2）
+echo "secret" | guomi sm2 --encrypt --standard --public-key <hex-key>
 ```
 
 ### 完整文档

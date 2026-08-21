@@ -213,6 +213,8 @@ defmodule Guomi.CLI do
           file: :string,
           signature: :string,
           ciphertext: :string,
+          user_id: :string,
+          standard: :boolean,
           help: :boolean
         ]
       )
@@ -228,6 +230,8 @@ defmodule Guomi.CLI do
     if opts[:help] do
       print_sm2_help()
     else
+      validate_sm2_option_combination(opts)
+
       cond do
         opts[:generate] ->
           do_generate_keypair()
@@ -250,6 +254,22 @@ defmodule Guomi.CLI do
     end
   end
 
+  defp validate_sm2_option_combination(opts) do
+    signing? = opts[:sign] == true or opts[:verify] == true
+    encrypting? = opts[:encrypt] == true or opts[:decrypt] == true
+
+    cond do
+      opts[:user_id] != nil and not signing? ->
+        fail("--user-id applies to --sign/--verify only")
+
+      opts[:standard] == true and not encrypting? ->
+        fail("--standard applies to --encrypt/--decrypt only")
+
+      true ->
+        :ok
+    end
+  end
+
   defp do_generate_keypair do
     case Guomi.SM2.generate_keypair() do
       {:ok, private_key, public_key} ->
@@ -264,7 +284,7 @@ defmodule Guomi.CLI do
     message = get_message(args, opts)
     private_key = required_hex_or_exit(opts[:private_key], "private-key")
 
-    case Guomi.SM2.sign(message, private_key) do
+    case sign_message(message, private_key, opts[:user_id]) do
       {:ok, signature} ->
         IO.puts(Base.encode16(signature, case: :lower))
 
@@ -276,12 +296,17 @@ defmodule Guomi.CLI do
     end
   end
 
+  defp sign_message(message, private_key, nil), do: Guomi.SM2.sign(message, private_key)
+
+  defp sign_message(message, private_key, user_id),
+    do: Guomi.SM2.sign_standard(message, private_key, user_id)
+
   defp do_verify(args, opts) do
     message = get_message(args, opts)
     signature = required_hex_or_exit(opts[:signature], "signature")
     public_key = required_hex_or_exit(opts[:public_key], "public-key")
 
-    case Guomi.SM2.verify(message, signature, public_key) do
+    case verify_signature(message, signature, public_key, opts[:user_id]) do
       {:ok, true} ->
         IO.puts("Signature is valid.")
         System.halt(0)
@@ -298,11 +323,22 @@ defmodule Guomi.CLI do
     end
   end
 
+  defp verify_signature(message, signature, public_key, nil),
+    do: Guomi.SM2.verify(message, signature, public_key)
+
+  defp verify_signature(message, signature, public_key, user_id),
+    do: Guomi.SM2.verify_standard(message, signature, public_key, user_id)
+
   defp do_encrypt(args, opts) do
     message = get_message(args, opts)
     public_key = required_hex_or_exit(opts[:public_key], "public-key")
 
-    case Guomi.SM2.encrypt(message, public_key) do
+    result =
+      if opts[:standard],
+        do: Guomi.SM2.encrypt_standard(message, public_key),
+        else: Guomi.SM2.encrypt(message, public_key)
+
+    case result do
       {:ok, ciphertext} ->
         IO.puts(Base.encode16(ciphertext, case: :lower))
 
@@ -327,7 +363,12 @@ defmodule Guomi.CLI do
     ciphertext = parse_hex_or_exit(ciphertext, "ciphertext")
     private_key = required_hex_or_exit(opts[:private_key], "private-key")
 
-    case Guomi.SM2.decrypt(ciphertext, private_key) do
+    result =
+      if opts[:standard],
+        do: Guomi.SM2.decrypt_standard(ciphertext, private_key),
+        else: Guomi.SM2.decrypt(ciphertext, private_key)
+
+    case result do
       {:ok, plaintext} ->
         IO.write(plaintext)
 
@@ -586,6 +627,8 @@ defmodule Guomi.CLI do
         --file <path>       Read message/ciphertext from a file (use - for stdin)
         --signature <hex>   Signature to verify (hex encoded)
         --ciphertext <hex>  Ciphertext to decrypt (hex encoded)
+        --user-id <id>      Sign/verify with the standard ZA computation for this user ID
+        --standard          Encrypt/decrypt using the standard C1 || C3 || C2 format
         --help            Show this help message
 
     INPUT:
@@ -594,6 +637,12 @@ defmodule Guomi.CLI do
         Use --file <path> to read from a file, or - to read from stdin.
         --message takes precedence for sign, verify, and encrypt operations.
 
+    FORMATS:
+        Without --user-id or --standard, sign/verify and encrypt/decrypt use the
+        legacy Guomi compatibility behavior (no ZA; C1 || C2 || C3 ciphertext with
+        a repeating XOR mask). The legacy formats are not interoperable with other
+        SM2 implementations and must not protect sensitive data.
+
     EXAMPLES:
         # Generate keypair
         guomi sm2 --generate
@@ -601,11 +650,17 @@ defmodule Guomi.CLI do
         # Sign a message
         echo "message" | guomi sm2 --sign --private-key <hex-key>
 
+        # Standard ZA-aware signature (interoperable raw r || s)
+        echo "message" | guomi sm2 --sign --user-id 1234567812345678 --private-key <hex-key>
+
         # Verify a signature
         guomi sm2 --verify --public-key <hex-key> --signature <hex-sig> --file message.txt
 
         # Encrypt a message
         echo "secret" | guomi sm2 --encrypt --public-key <hex-key>
+
+        # Standard encryption (C1 || C3 || C2)
+        echo "secret" | guomi sm2 --encrypt --standard --public-key <hex-key>
 
         # Decrypt a ciphertext
         guomi sm2 --decrypt --private-key <hex-key> --ciphertext <hex-cipher>

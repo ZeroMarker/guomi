@@ -5,6 +5,29 @@ All notable changes to Guomi are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added SM2 CLI `--user-id <id>` to sign/verify with the standard ZA computation
+  (`SM3(ZA || message)`, interoperable raw `r || s`), and `--standard` to
+  encrypt/decrypt with the standard `C1 || C3 || C2` format. Without these
+  flags the CLI keeps the legacy compatibility behavior. The options are
+  rejected outside their applicable operations.
+
+### Changed
+
+- `Guomi.SM2.Curve.shared_point/2` and `shared_secret/2` now validate the peer
+  point themselves and return `{:error, :invalid_point}` for off-curve input
+  instead of relying on callers to reject it.
+- `Guomi.SM2.Curve.verify/3` returns `false` for malformed signatures instead
+  of raising; `Guomi.SM2` continues to report them as `{:error, :invalid_signature}`.
+- SM4 PKCS#7 padding validation now compares all padding bytes without
+  short-circuiting, removing a padding-value-dependent timing difference in
+  decryption.
+- Legacy SM2 encryption XOR no longer materialises a full repeated keystream;
+  peak memory now stays proportional to the message size.
+
 ## [0.5.2] - 2026-08-19
 
 ### Added

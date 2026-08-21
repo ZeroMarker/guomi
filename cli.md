@@ -188,14 +188,18 @@ guomi sm2 [options] [input]
 | `--file <path>` | 从文件读取消息或密文；使用 `-` 表示 stdin |
 | `--signature <hex>` | 签名值（64 字节 raw r \|\| s，十六进制，仅验签） |
 | `--ciphertext <hex>` | 密文（十六进制，仅解密） |
+| `--user-id <id>` | 启用标准 ZA 签名/验签，并指定用户 ID（仅 `--sign`/`--verify`） |
+| `--standard` | 使用标准 `C1 \|\| C3 \|\| C2` 加密/解密格式（仅 `--encrypt`/`--decrypt`） |
 | `--help` | 显示帮助信息 |
 
 ### 兼容性说明
 
-- 签名算法使用 SM3 预哈希 + raw 64 字节 `r || s` 格式，未暴露用户 ID/ZA 参数
-- 加密使用 Guomi 内部 `C1 || C2 || C3` 格式（C1=65 字节临时公钥, C3=32 字节 SM3 MAC）。当前实现对超过 32 字节的消息重复 XOR 掩码，会泄露相隔 32 字节的明文 XOR 关系；仅用于兼容和测试，不得用于敏感数据或生产协议
-- **不应假定可与 OpenSSL 或其他 SM2 实现互通**
-- 标准 ZA 签名和 `C1 || C3 || C2` 加密目前仅通过库 API 提供；CLI 保持旧兼容行为，避免无提示改变已有脚本
+- 默认（未提供 `--user-id` / `--standard`）保持旧兼容行为，避免无提示改变已有脚本
+- 旧签名使用 SM3 预哈希 + raw 64 字节 `r || s` 格式，不计算 ZA
+- 旧加密使用 Guomi 内部 `C1 || C2 || C3` 格式（C1=65 字节临时公钥, C3=32 字节 SM3 MAC）。当前实现对超过 32 字节的消息重复 XOR 掩码，会泄露相隔 32 字节的明文 XOR 关系；仅用于兼容和测试，不得用于敏感数据或生产协议
+- **旧格式不应假定可与 OpenSSL 或其他 SM2 实现互通**
+- 提供 `--user-id` 时签名计算 `SM3(ZA || message)`，与标准实现和库 API `sign_standard/3` 一致
+- 提供 `--standard` 时加密使用标准 SM3 KDF 与 `C1 || C3 || C2` 裸格式，与库 API `encrypt_standard/2` 一致；仍拒绝空消息
 
 ### 示例
 
@@ -238,6 +242,23 @@ guomi sm2 --decrypt \
 guomi sm2 --decrypt \
   --private-key <hex-privkey> \
   --file ciphertext.hex
+
+# 标准签名（显式 user ID，计算 ZA，可与标准实现互通）
+echo "message to sign" | guomi sm2 --sign --user-id 1234567812345678 --private-key <hex-key>
+
+# 标准验签（必须传入相同 user ID）
+guomi sm2 --verify --user-id 1234567812345678 \
+  --public-key <hex-pubkey> \
+  --signature <hex-signature> \
+  --message "hello"
+
+# 标准加密（C1 || C3 || C2，标准 SM3 KDF，拒绝空消息）
+echo "secret message" | guomi sm2 --encrypt --standard --public-key <hex-pubkey>
+
+# 标准解密
+guomi sm2 --decrypt --standard \
+  --private-key <hex-privkey> \
+  --ciphertext <hex-ciphertext>
 ```
 
 ---
@@ -297,4 +318,4 @@ set ELIXIR_ERL_OPTIONS=-noinput && guomi version
 | SM2 私钥 | 32 字节大端整数，hex 编码 |
 | SM2 公钥 | 65 字节未压缩点 `0x04 || x || y`，hex 编码 |
 | SM2 签名 | 64 字节 raw `r || s`，hex 编码 |
-| SM2 CLI 密文 | 旧兼容 `C1 || C2 || C3` 格式，hex 编码；标准 `C1 || C3 || C2` 仅通过库 API 提供 |
+| SM2 CLI 密文 | 默认为旧兼容 `C1 \|\| C2 \|\| C3` 格式；提供 `--standard` 时为标准 `C1 \|\| C3 \|\| C2` 格式，均以 hex 编码 |
