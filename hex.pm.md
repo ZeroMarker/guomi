@@ -6,7 +6,7 @@
 
 仓库使用 [`.github/workflows/release.yml`](.github/workflows/release.yml) 自动发布：
 
-1. 推送与 `mix.exs` 版本一致、形如 `v0.5.2` 的 Git tag。
+1. 推送与 `mix.exs` 版本一致、形如 `v0.5.3` 的 Git tag。
 2. workflow 在 Erlang/OTP 27 与 Elixir 1.18 上编译并运行测试。
 3. 测试通过后创建 GitHub Release。
 4. 使用仓库 secret `HEX_API_KEY` 构建并发布 Hex 包与文档。
@@ -70,8 +70,8 @@ mix hex.info guomi
 确认版本提交已在 `main` 后创建并推送 tag：
 
 ```bash
-git tag -a v0.5.2 -m "Release v0.5.2"
-git push origin v0.5.2
+git tag -a v0.5.3 -m "Release v0.5.3"
+git push origin v0.5.3
 ```
 
 随后在 GitHub Actions 中确认 Release workflow 的 `test`、`release` 和 `publish` 三个 job 均成功。
@@ -106,7 +106,7 @@ CI 环境通过 `HEX_API_KEY` 认证，本地维护者通常通过 `mix hex.user
 
 ```elixir
 def deps do
-  [{:guomi, "~> 0.5.2"}]
+  [{:guomi, "~> 0.5.3"}]
 end
 ```
 
@@ -123,7 +123,7 @@ mix help hex.package
 
 ```bash
 mix hex.publish package --replace
-mix hex.publish --revert 0.5.2
+mix hex.publish --revert 0.5.3
 ```
 
 已被用户安装的错误版本不应静默覆盖。通常更稳妥的处理方式是发布新的补丁版本，并在 `CHANGELOG.md` 和 GitHub Release 中说明修复内容。

@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-08-28
+
 ### Added
 
 - Added SM2 CLI `--user-id <id>` to sign/verify with the standard ZA computation
@@ -24,10 +26,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Optimized SM2 field reduction and subtraction fast paths, reducing local
   SM2 operation medians by roughly 30% without changing curve or wire formats.
-- `Guomi.SM2.Curve.shared_point/2` and `shared_secret/2` now validate the peer
+- SM2 shared-point helpers now validate the peer
   point themselves and return `{:error, :invalid_point}` for off-curve input
   instead of relying on callers to reject it.
-- `Guomi.SM2.Curve.verify/3` returns `false` for malformed signatures instead
+- The SM2 curve verifier returns `false` for malformed signatures instead
   of raising; `Guomi.SM2` continues to report them as `{:error, :invalid_signature}`.
 - SM4 PKCS#7 padding validation now compares all padding bytes without
   short-circuiting, removing a padding-value-dependent timing difference in
@@ -266,7 +268,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the initial test suite.
 - Added ExDoc documentation setup and package metadata.
 
-[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/ZeroMarker/guomi/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/ZeroMarker/guomi/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0

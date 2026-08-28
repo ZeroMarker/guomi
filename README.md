@@ -70,7 +70,7 @@ Guomi.supported()
 ```elixir
 def deps do
   [
-    {:guomi, "~> 0.5.2"}
+    {:guomi, "~> 0.5.3"}
   ]
 end
 ```
@@ -337,6 +337,11 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ### Recent Versions
 
+#### [0.5.3] - 2026-08-28
+- Added strict local and CI OpenSSL interoperability checks
+- Added core-library coverage and Dialyzer CI gates
+- Optimized SM2 modular arithmetic fast paths, improving local SM2 medians by roughly 30%
+
 #### [0.5.2] - 2026-08-19
 - Added standards-compatible SM2 ZA-aware signing and C1/C3/C2 encryption APIs
 - Removed modulo bias from SM2 private-key and signature nonce generation
@@ -377,6 +382,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 - Initial release
 - SM2/SM3/SM4 implementations
 
+[0.5.3]: https://github.com/ZeroMarker/guomi/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/ZeroMarker/guomi/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ZeroMarker/guomi/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ZeroMarker/guomi/compare/v0.4.2...v0.5.0
