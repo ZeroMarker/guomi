@@ -30,9 +30,14 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 mix test
 mix credo --strict
+mix run scripts/openssl_compat.exs
 mix docs
 mix hex.build
 ```
+
+`mix run scripts/openssl_compat.exs` 要求本机 OpenSSL 提供 SM2、SM3、SM4-ECB、SM4-CBC
+和 SM4-CTR。该脚本用于发布前的独立实现互操作检查；如果本机 OpenSSL 不具备这些算法，
+脚本会失败，不应将结果解释为兼容性测试通过。
 
 `mix hex.build` 会显示包元数据与包含文件。当前包应包含：
 

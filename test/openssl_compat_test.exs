@@ -36,6 +36,14 @@ defmodule Guomi.OpenSSLCompatTest do
     end
   end
 
+  defp require_openssl!(reason) do
+    if System.get_env("GUOMI_REQUIRE_OPENSSL") in ["1", "true"] do
+      flunk("OpenSSL interoperability prerequisite unavailable: #{inspect(reason)}")
+    end
+
+    :ok
+  end
+
   defp run_cli(args, input) do
     elixir = System.find_executable("elixir") || System.find_executable("elixir.bat")
 
@@ -209,7 +217,7 @@ defmodule Guomi.OpenSSLCompatTest do
     if Guomi.SM3.supported?() do
       case openssl_sm3_hex(input) do
         {:skip, _reason} ->
-          :ok
+          require_openssl!(:sm3_unavailable)
 
         expected ->
           {actual, 0} = run_cli(["sm3", "--hex"], input)
@@ -226,7 +234,7 @@ defmodule Guomi.OpenSSLCompatTest do
     if Guomi.SM4.supported?() do
       case openssl_sm4("sm4-ecb", plaintext, []) do
         {:skip, _reason} ->
-          :ok
+          require_openssl!(:sm4_ecb_unavailable)
 
         expected ->
           {actual, 0} = run_cli(["sm4", "--key", @key_hex, "--hex"], plaintext)
@@ -243,7 +251,7 @@ defmodule Guomi.OpenSSLCompatTest do
     if Guomi.SM4.supported?() do
       case openssl_sm4("sm4-cbc", plaintext, ["-iv", @iv_hex]) do
         {:skip, _reason} ->
-          :ok
+          require_openssl!(:sm4_cbc_unavailable)
 
         expected ->
           {actual, 0} =
@@ -287,7 +295,7 @@ defmodule Guomi.OpenSSLCompatTest do
 
       case run_openssl(verify_args) do
         {:skip, reason} ->
-          IO.puts("Skipping SM2 OpenSSL interoperability: #{reason}")
+          require_openssl!(reason)
 
         {_output, 0} ->
           sign_args = [
@@ -340,7 +348,7 @@ defmodule Guomi.OpenSSLCompatTest do
 
         case run_openssl(decrypt_args) do
           {:skip, reason} ->
-            IO.puts("Skipping SM2 OpenSSL encryption interoperability: #{reason}")
+            require_openssl!(reason)
 
           {_output, 0} ->
             assert File.read!(plaintext_path) == message

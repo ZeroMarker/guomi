@@ -290,6 +290,23 @@ mix credo
 mix dialyzer
 ```
 
+### OpenSSL 互操作验证
+
+本地可使用 OpenSSL 作为独立实现，验证 SM3、SM4 和标准 SM2 的结果与双向互操作：
+
+```bash
+mix run scripts/openssl_compat.exs
+```
+
+脚本会先检查 OpenSSL 是否提供 SM2、SM3、SM4-ECB、SM4-CBC 和 SM4-CTR，随后执行
+`test/openssl_compat_test.exs`，并额外验证 SM4 三种模式的密文逐字节一致，以及
+OpenSSL → Guomi、Guomi → OpenSSL 两个解密方向。OpenSSL 不可用或算法缺失时脚本失败，
+不会把未执行的互操作测试当作通过。
+
+SM2 加密每次使用随机临时密钥，因此不能比较密文逐字节一致；应验证双方可以互相解密。
+SM2 标准接口使用 `C1 || C3 || C2`，OpenSSL 使用 DER 外层编码，测试会在格式边界进行转换。
+旧版 SM2 兼容加密接口不保证与 OpenSSL 互操作。
+
 ### 生成文档
 
 ```bash

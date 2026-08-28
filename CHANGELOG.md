@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   encrypt/decrypt with the standard `C1 || C3 || C2` format. Without these
   flags the CLI keeps the legacy compatibility behavior. The options are
   rejected outside their applicable operations.
+- Added `scripts/openssl_compat.exs` for strict local interoperability checks
+  against OpenSSL, including exact SM4 ECB/CBC/CTR ciphertext comparisons and
+  bidirectional decryption checks.
 
 ### Changed
 
