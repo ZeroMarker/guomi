@@ -17,6 +17,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added `scripts/openssl_compat.exs` for strict local interoperability checks
   against OpenSSL, including exact SM4 ECB/CBC/CTR ciphertext comparisons and
   bidirectional decryption checks.
+- Added strict OpenSSL compatibility and core-library coverage gates to CI;
+  CLI coverage remains enforced through black-box integration tests.
 
 ### Changed
 

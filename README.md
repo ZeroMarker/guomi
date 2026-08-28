@@ -272,6 +272,9 @@ mix credo --strict
 MIX_ENV=test mix coveralls.json
 ```
 
+覆盖率检查对核心库设置 85% 的最低门槛；CLI 使用子进程黑盒集成测试，单独由
+`test/cli_test.exs` 和 OpenSSL 互操作脚本验证，不计入 Erlang 行覆盖率统计。
+
 Windows PowerShell 中可将最后一条命令写为 `$env:MIX_ENV="test"; mix coveralls.json`。
 
 ### 代码格式化
@@ -306,6 +309,9 @@ OpenSSL → Guomi、Guomi → OpenSSL 两个解密方向。OpenSSL 不可用或�
 SM2 加密每次使用随机临时密钥，因此不能比较密文逐字节一致；应验证双方可以互相解密。
 SM2 标准接口使用 `C1 || C3 || C2`，OpenSSL 使用 DER 外层编码，测试会在格式边界进行转换。
 旧版 SM2 兼容加密接口不保证与 OpenSSL 互操作。
+
+GitHub Actions 在 Ubuntu 主工具链中也执行同一严格脚本，OpenSSL 缺失、算法缺失或
+任一互操作方向失败都会阻断 CI。
 
 ### 生成文档
 

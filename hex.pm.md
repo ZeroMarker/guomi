@@ -30,10 +30,14 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 mix test
 mix credo --strict
+MIX_ENV=test mix coveralls.json
 mix run scripts/openssl_compat.exs
 mix docs
 mix hex.build
 ```
+
+`MIX_ENV=test mix coveralls.json` 对不含 CLI 的核心库执行 85% 最低覆盖率检查；CLI
+由黑盒集成测试覆盖，原因是子进程执行不会反映到当前 ExCoveralls 的行覆盖率中。
 
 `mix run scripts/openssl_compat.exs` 要求本机 OpenSSL 提供 SM2、SM3、SM4-ECB、SM4-CBC
 和 SM4-CTR。该脚本用于发布前的独立实现互操作检查；如果本机 OpenSSL 不具备这些算法，

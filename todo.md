@@ -48,6 +48,7 @@
 - [x] 增加文档示例测试：库 API 使用 doctest，CLI 示例使用集成测试，避免 README、`cli.md` 与实际行为漂移。
 - [x] 将 SM2 官方 ZA/签名向量和 OpenSSL 双向签名互操作纳入 CI；外部实现不可用时明确报告原因。
 - [x] 提供严格的本地 OpenSSL 互操作脚本，覆盖 SM3、SM4 ECB/CBC/CTR 和标准 SM2；OpenSSL 能力缺失时失败退出。
+- [x] 在 CI 中执行严格 OpenSSL 互操作脚本，并为核心库设置 85% 覆盖率门槛；CLI 由黑盒集成测试单独验证。
 
 ## P1：API 与 CLI 完善
 

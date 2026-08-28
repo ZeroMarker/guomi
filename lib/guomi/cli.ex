@@ -288,9 +288,6 @@ defmodule Guomi.CLI do
       {:ok, signature} ->
         IO.puts(Base.encode16(signature, case: :lower))
 
-      {:error, :unsupported} ->
-        fail("SM2 signing is not supported on this system.")
-
       {:error, reason} ->
         fail(format_sm2_error(reason))
     end
@@ -301,6 +298,7 @@ defmodule Guomi.CLI do
   defp sign_message(message, private_key, user_id),
     do: Guomi.SM2.sign_standard(message, private_key, user_id)
 
+  @spec do_verify([String.t()], keyword()) :: no_return()
   defp do_verify(args, opts) do
     message = get_message(args, opts)
     signature = required_hex_or_exit(opts[:signature], "signature")
@@ -314,9 +312,6 @@ defmodule Guomi.CLI do
       {:ok, false} ->
         IO.puts("Signature is INVALID.")
         System.halt(1)
-
-      {:error, :unsupported} ->
-        fail("SM2 verification is not supported on this system.")
 
       {:error, reason} ->
         fail(format_sm2_error(reason))
@@ -354,7 +349,7 @@ defmodule Guomi.CLI do
           ciph
 
         {nil, nil, []} ->
-          required_hex_or_exit(nil, "ciphertext")
+          fail("Missing required option --ciphertext")
 
         {nil, _file, _args} ->
           read_input(args, opts)
@@ -420,9 +415,7 @@ defmodule Guomi.CLI do
   end
 
   defp ensure_sm3_supported! do
-    unless Guomi.SM3.supported?() do
-      fail("SM3 is not supported on this system")
-    end
+    :ok
   end
 
   defp parse_hex_or_exit(nil, _), do: nil
@@ -478,6 +471,7 @@ defmodule Guomi.CLI do
     fail("Invalid padding option: #{padding} (use 'pkcs7' or 'none')")
   end
 
+  @spec fail(String.t() | [String.t()]) :: no_return()
   defp fail(messages) when is_list(messages) do
     Enum.each(messages, &IO.puts(:stderr, "Error: #{&1}"))
     System.halt(1)
@@ -489,20 +483,15 @@ defmodule Guomi.CLI do
   defp format_sm4_error(:invalid_iv_size), do: "Invalid IV size (must be 16 bytes)"
   defp format_sm4_error(:invalid_block_size), do: "Invalid block size"
   defp format_sm4_error(:invalid_padding), do: "Invalid padding option"
-  defp format_sm4_error(:unsupported), do: "SM4 is not supported on this system"
 
   defp format_sm4_error({:invalid_mode, mode}),
     do: "Invalid mode: #{mode} (use 'ecb', 'cbc', or 'ctr')"
-
-  defp format_sm4_error(_), do: "Unknown error"
 
   defp format_sm2_error(:decryption_failed), do: "Decryption failed"
   defp format_sm2_error(:invalid_input), do: "Invalid message input"
   defp format_sm2_error(:invalid_ciphertext), do: "Invalid ciphertext"
   defp format_sm2_error(:invalid_key), do: "Invalid key"
   defp format_sm2_error(:invalid_signature), do: "Invalid signature"
-  defp format_sm2_error(:unsupported), do: "SM2 is not supported on this system"
-  defp format_sm2_error(_), do: "Unknown error"
 
   # Help messages
   defp print_help do
