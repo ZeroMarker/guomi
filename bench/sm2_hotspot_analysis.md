@@ -94,6 +94,39 @@ defp mod(value, modulus), do: rem(value, modulus) + modulus |> then(&if &1 >= mo
 * `bench/bench.exs` 同机同参 median 提升 ≥10% 且 max 不劣化 >15% 视为有效；单次 wall-clock 不得作为结论（`bench/bench.exs:28-38` 统计）。
 * 若引入窗口/Montgomery，需补充对应侧信道声明（窗口查表引入缓存侧信道，需与 `SECURITY.md:39` 协同）。
 
-## 7. 结论
+## 7. 2026-08-28 优化验证
 
-当前热点集中在 `mod/2` 与 Jacobian 基本运算，属于实现选型而非算法缺陷；短期以 `mod` 快速路径与窗口化取得可观收益，长期视是否需要恒定时间再评估 Montgomery。已满足 `todo.md` “标准 KDF 与密文迁移归入 P0，此项只处理性能” 的边界要求。
+在同一台 `aarch64-unknown-linux-gnu`、Elixir 1.14 / OTP 25、4 schedulers 的环境中，
+使用 `mix run bench/bench.exs` 对优化前后各运行一次；每次内部仍为 5 samples、1 warmup、
+20 次 SM2 操作。优化前数据取自本轮修改前的基线，优化后连续两次中位数分别为：
+
+| 用例 | 优化前 median | 优化后 median（两次） | 变化 |
+|------|---------------:|----------------------:|-----:|
+| SM2 generate_keypair | 2.45 ms/op | 1.70 / 1.66 ms/op | -30.6% / -32.2% |
+| SM2 sign 32-byte message | 2.49 ms/op | 1.74 / 1.71 ms/op | -30.1% / -31.3% |
+| SM2 verify signature | 3.31 ms/op | 2.27 / 2.34 ms/op | -31.4% / -29.3% |
+| SM2 encrypt 32-byte message | 4.91 ms/op | 3.35 / 3.36 ms/op | -31.8% / -31.6% |
+| SM2 decrypt 32-byte message | 2.48 ms/op | 1.66 / 1.58 ms/op | -33.1% / -36.3% |
+
+本次优化位于 `lib/guomi/sm2/curve.ex`：
+
+- `mod/2` 只执行一次 `rem`，再通过条件加法处理负余数，避免原实现的第二次归约。
+- 字段减法 `mod_sub/2` 在两个规范化字段元素之间直接使用条件加 `p`，不再调用通用 `rem`。
+
+这两处只改变模运算实现，不改变曲线参数、点运算公式、随机数生成、KDF 或密文格式。
+SM3/SM4 的吞吐变化在本机测量噪声范围内，没有为其引入额外改动。
+
+验证结果：`mix test` 为 140 tests、3 doctests、0 failures；严格 OpenSSL 互操作测试通过。
+
+## 8. 后续优化边界
+
+短期低风险的 `mod` 优化已完成。下一阶段若继续追求 SM2 性能，应先补充可重复的
+`eprof`/`fprof` 热点数据，再评估固定窗口标量乘法或 Montgomery 域。窗口查表可能引入
+缓存侧信道，Montgomery/恒定时间求逆则会扩大实现和审查范围；在第三方审计前不应仅以
+基准收益为理由引入高风险重写。
+
+## 9. 结论
+
+当前热点仍集中在 `mod/2` 与 Jacobian 基本运算，属于实现选型而非算法缺陷；本轮 `mod` 快速路径
+已经取得约 30% 的 SM2 中位数改善。窗口化和 Montgomery 优化仍需侧信道评估，并继续遵守
+`todo.md` 中“标准 KDF 与密文迁移归入 P0，此项只处理性能”的边界要求。

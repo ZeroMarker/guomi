@@ -22,6 +22,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Optimized SM2 field reduction and subtraction fast paths, reducing local
+  SM2 operation medians by roughly 30% without changing curve or wire formats.
 - `Guomi.SM2.Curve.shared_point/2` and `shared_secret/2` now validate the peer
   point themselves and return `{:error, :invalid_point}` for off-curve input
   instead of relying on callers to reject it.

@@ -11,7 +11,8 @@ defmodule Guomi.SM2.Curve do
 
   # -- Field operations -------------------------------------------------------
 
-  defp mod_sub(a, b), do: mod(a - b, @p)
+  defp mod_sub(a, b) when a >= b, do: a - b
+  defp mod_sub(a, b), do: a - b + @p
   defp mod_mul(a, b), do: mod(a * b, @p)
 
   defp scalar_add(a, b), do: mod(a + b, @n)
@@ -19,10 +20,8 @@ defmodule Guomi.SM2.Curve do
   defp scalar_mul(a, b), do: mod(a * b, @n)
 
   defp mod(value, modulus) do
-    value
-    |> rem(modulus)
-    |> Kernel.+(modulus)
-    |> rem(modulus)
+    remainder = rem(value, modulus)
+    if remainder < 0, do: remainder + modulus, else: remainder
   end
 
   # Modular inverse using extended Euclidean algorithm (iterative)
